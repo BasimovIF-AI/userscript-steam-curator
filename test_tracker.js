@@ -3,67 +3,98 @@ const assert = require('assert');
 // Воспроизводим функцию сортировки кураторов из трекера
 function getSortedCurators(curatorsMap = {}) {
     return Object.values(curatorsMap).sort((a, b) => {
-        // 1. Сначала подписки с известной датой (от новых к старым)
-        if (a.followedAt && b.followedAt) {
-            return new Date(b.followedAt) - new Date(a.followedAt);
+        const aFollowed = a.status === 'followed';
+        const bFollowed = b.status === 'followed';
+
+        // 1. Сначала все активные подписки, затем отписанные
+        if (aFollowed !== bFollowed) {
+            return aFollowed ? -1 : 1;
         }
-        if (a.followedAt && !b.followedAt) return -1;
-        if (!a.followedAt && b.followedAt) return 1;
 
-        // 2. Затем подписки с неизвестной датой (оформленные до начала ведения базы)
-        if (a.status === 'followed' && b.status !== 'followed') return -1;
-        if (a.status !== 'followed' && b.status === 'followed') return 1;
-
-        // 3. Затем отписанные (по дате отписки, от недавних к старым)
-        if (a.unfollowedAt && b.unfollowedAt) {
-            return new Date(b.unfollowedAt) - new Date(a.unfollowedAt);
+        if (aFollowed) {
+            // Для активных подписок: сначала с известной датой (от новых к старым)
+            if (a.followedAt && b.followedAt) {
+                return new Date(b.followedAt) - new Date(a.followedAt);
+            }
+            if (a.followedAt && !b.followedAt) return -1;
+            if (!a.followedAt && b.followedAt) return 1;
+        } else {
+            // Для отписанных: сначала недавно отписанные
+            if (a.unfollowedAt && b.unfollowedAt) {
+                return new Date(b.unfollowedAt) - new Date(a.unfollowedAt);
+            }
+            if (a.unfollowedAt && !b.unfollowedAt) return -1;
+            if (!a.unfollowedAt && b.unfollowedAt) return 1;
         }
 
         return (a.name || '').localeCompare(b.name || '');
     });
 }
 
-// Тест 1: Сортировка по дате подписки
-console.log('Тест 1: Проверка сортировки по дате подписки...');
-const curatorsData = {
-    "1": { clanId: "1", name: "Alpha", status: "followed", followedAt: "2026-10-15T10:00:00.000Z", unfollowedAt: null },
-    "2": { clanId: "2", name: "Beta (самый свежий)", status: "followed", followedAt: "2026-10-19T18:00:00.000Z", unfollowedAt: null },
-    "3": { clanId: "3", name: "Gamma (старая база)", status: "followed", followedAt: null, unfollowedAt: null },
-    "4": { clanId: "4", name: "Delta (отписан)", status: "unfollowed", followedAt: null, unfollowedAt: "2026-10-19T12:00:00.000Z" }
+// Тест 1: Первичная инициализация базы нового пользователя
+console.log('Тест 1: Проверка заведения базы нового пользователя и обхода кураторки...');
+const dbCreatedAt = "2026-10-01T12:00:00.000Z";
+const initialCurators = [
+    { clanId: "10", name: "Classic RPG", link: "https://store.steampowered.com/curator/10/" },
+    { clanId: "20", name: "Strategy Legends", link: "https://store.steampowered.com/curator/20/" }
+];
+
+const database = {
+    version: 1,
+    user: "NewPlayer",
+    steamId: "12345678",
+    createdAt: dbCreatedAt,
+    updatedAt: dbCreatedAt,
+    curators: {}
 };
 
-const sorted = getSortedCurators(curatorsData);
-assert.strictEqual(sorted.length, 4, "Должно быть 4 куратора");
-assert.strictEqual(sorted[0].clanId, "2", "Первым должен идти самый недавний подписчик (Beta)");
-assert.strictEqual(sorted[1].clanId, "1", "Вторым должен идти Alpha (15 октября)");
-assert.strictEqual(sorted[2].clanId, "3", "Третьим должен идти Gamma с неизвестной датой подписки");
-assert.strictEqual(sorted[3].clanId, "4", "Последним должен идти отписанный Delta");
+// Заполняем кураторов из первичного обхода (followedAt = createdAt)
+initialCurators.forEach(item => {
+    database.curators[item.clanId] = {
+        clanId: item.clanId,
+        name: item.name,
+        link: item.link,
+        status: 'followed',
+        followedAt: dbCreatedAt,
+        unfollowedAt: null,
+        isInitial: true
+    };
+});
 
-// Тест 2: Эмуляция жизненного цикла куратора
-console.log('Тест 2: Проверка переходов состояний follow / unfollow...');
-let curator = {
-    clanId: "100",
-    name: "Strategy World",
-    link: "https://store.steampowered.com/curator/100/",
-    status: "followed",
-    followedAt: null, // Исходно был подписан до базы
-    unfollowedAt: null
+assert.strictEqual(database.curators["10"].followedAt, dbCreatedAt, "Куратор 10 должен иметь дату создания БД");
+assert.strictEqual(database.curators["20"].followedAt, dbCreatedAt, "Куратор 20 должен иметь дату создания БД");
+
+// Тест 2: Последующая подписка вручную на странице куратора
+console.log('Тест 2: Проверка последующей ручной подписки...');
+const laterFollowDate = "2026-10-19T21:30:00.000Z";
+database.curators["30"] = {
+    clanId: "30",
+    name: "Brand New Curator",
+    link: "https://store.steampowered.com/curator/30/",
+    status: 'followed',
+    followedAt: laterFollowDate,
+    unfollowedAt: null,
+    isInitial: false
 };
 
-// 1. Отписка
-const unfollowTime = "2026-10-19T20:00:00.000Z";
-curator.status = 'unfollowed';
-curator.unfollowedAt = unfollowTime;
-assert.strictEqual(curator.status, 'unfollowed');
-assert.strictEqual(curator.unfollowedAt, unfollowTime);
+// Тест 3: Проверка корректности сортировки
+console.log('Тест 3: Проверка сортировки экспорта (ручная подписка выше начальной базы)...');
+const sorted = getSortedCurators(database.curators);
+assert.strictEqual(sorted.length, 3, "Всего должно быть 3 куратора");
+assert.strictEqual(sorted[0].clanId, "30", "Первым должен идти куратор с самой поздней датой подписки (19 октября)");
+assert.strictEqual(sorted[0].followedAt, laterFollowDate);
+// Кураторы из начальной базы идут следом
+assert.ok(sorted[1].clanId === "10" || sorted[1].clanId === "20");
+assert.ok(sorted[2].clanId === "10" || sorted[2].clanId === "20");
 
-// 2. Повторная подписка
-const reFollowTime = "2026-10-19T21:00:00.000Z";
-curator.status = 'followed';
-curator.followedAt = reFollowTime;
-curator.unfollowedAt = null;
-assert.strictEqual(curator.status, 'followed');
-assert.strictEqual(curator.followedAt, reFollowTime);
-assert.strictEqual(curator.unfollowedAt, null);
+// Тест 4: Отписка
+console.log('Тест 4: Проверка отписки...');
+database.curators["10"].status = 'unfollowed';
+database.curators["10"].unfollowedAt = "2026-10-20T08:00:00.000Z";
 
-console.log('✅ Все тесты трекера успешно пройдены!');
+const sortedAfterUnfollow = getSortedCurators(database.curators);
+assert.strictEqual(sortedAfterUnfollow[sortedAfterUnfollow.length - 1].clanId, "10", "Отписанный куратор должен идти в конце списка");
+assert.strictEqual(sortedAfterUnfollow[0].clanId, "30", "Активный подписчик 30 должен идти первым");
+assert.strictEqual(sortedAfterUnfollow[1].clanId, "20", "Активный подписчик 20 должен идти вторым");
+
+console.log('✅ Все тесты трекера (включая первичный обход кураторки) успешно пройдены!');
