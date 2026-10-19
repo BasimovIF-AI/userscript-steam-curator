@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Steam Curator Follow Tracker
 // @namespace    https://github.com/BasimovIF-AI/userscript-steam-curator
-// @version      2.1.0
-// @description  Отслеживание подписок/отписок на кураторов Steam, учет дат, первичная инициализация базы с обходом кураторки и экспорт
+// @version      2.2.0
+// @description  Отслеживание подписок/отписок на кураторов Steam, учет дат, первичная инициализация, импорт и экспорт базы
 // @author       Senior Software Engineer
 // @match        *://store.steampowered.com/curator/*
 // @match        *://store.steampowered.com/curators/mycurators*
@@ -241,6 +241,49 @@
         URL.revokeObjectURL(url);
     }
 
+    function importCuratorsJSON(userInfo, onSuccess) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json,application/json';
+        input.style.display = 'none';
+        input.onchange = (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                try {
+                    const parsed = JSON.parse(evt.target.result);
+                    if (!parsed || !Array.isArray(parsed.curators)) {
+                        throw new Error('Файл не содержит корректного массива "curators".');
+                    }
+                    const steamId = parsed.steamId || userInfo.steamId;
+                    const db = {
+                        version: parsed.version || 1,
+                        user: parsed.user || userInfo.userName,
+                        steamId: steamId,
+                        createdAt: parsed.createdAt || new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                        curators: {}
+                    };
+                    parsed.curators.forEach(c => {
+                        if (c.clanId) {
+                            db.curators[c.clanId] = c;
+                        }
+                    });
+                    saveDatabase(db);
+                    alert(`✅ База успешно импортирована!\nПользователь: ${db.user}\nКураторов загружено: ${Object.keys(db.curators).length}\nДата создания базы: ${formatDate(db.createdAt)}`);
+                    onSuccess?.(db);
+                } catch (err) {
+                    alert(`❌ Ошибка импорта JSON: ${err.message}`);
+                }
+            };
+            reader.readAsText(file);
+        };
+        document.body.appendChild(input);
+        input.click();
+        document.body.removeChild(input);
+    }
+
     // -------------------------------------------------------------------------
     // Стили (Steam Native Dark Theme)
     // -------------------------------------------------------------------------
@@ -472,8 +515,11 @@
                 ${badgeHtml}
             </div>
             <div class="sct-actions">
-                <button class="sct-btn" id="sct-btn-export">
-                    📥 Скачать список кураторов (JSON)
+                <button class="sct-btn" id="sct-btn-export" title="Скачать базу в JSON">
+                    💾 Экспорт
+                </button>
+                <button class="sct-btn" id="sct-btn-import" title="Загрузить базу из JSON">
+                    📥 Импорт
                 </button>
                 <span class="sct-account-info">
                     База: <b>${escapeHtml(db.user)}</b> (${totalTracked})
@@ -484,6 +530,11 @@
         const exportBtn = widget.querySelector('#sct-btn-export');
         if (exportBtn) {
             exportBtn.onclick = () => exportCuratorsJSON(userInfo);
+        }
+
+        const importBtn = widget.querySelector('#sct-btn-import');
+        if (importBtn) {
+            importBtn.onclick = () => importCuratorsJSON(userInfo, () => updateCuratorPageUI());
         }
     }
 
@@ -632,9 +683,12 @@
         panel.innerHTML = `
             <h4>🛡️ Трекер кураторов Steam</h4>
             ${statusText}
-            <div style="display:flex; gap:8px;">
+            <div style="display:flex; gap:6px;">
                 <button class="sct-btn" id="sct-btn-export-all" style="flex:1; justify-content:center;">
-                    💾 Экспорт JSON
+                    💾 Экспорт
+                </button>
+                <button class="sct-btn" id="sct-btn-import-all" style="flex:1; justify-content:center;">
+                    📥 Импорт
                 </button>
                 <button class="sct-btn" id="sct-btn-go-back" style="flex:1; justify-content:center;">
                     🔙 Назад
@@ -650,6 +704,7 @@
         }
 
         panel.querySelector('#sct-btn-export-all').onclick = () => exportCuratorsJSON(userInfo);
+        panel.querySelector('#sct-btn-import-all').onclick = () => importCuratorsJSON(userInfo, () => renderMyCuratorsPanel());
         panel.querySelector('#sct-btn-go-back').onclick = () => {
             if (window.history.length > 1) window.history.back();
             else window.location.href = 'https://store.steampowered.com/';
