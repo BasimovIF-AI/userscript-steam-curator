@@ -38,7 +38,7 @@
             });
         } catch (_) {}
 
-        ids.push('anonymous', 'default', 'SteamUser');
+        ids.push('101248791', '1004224715', 'anonymous', 'default', 'SteamUser');
 
         ids.forEach(id => {
             if (id) {
