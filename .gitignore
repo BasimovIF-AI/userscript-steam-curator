@@ -1,0 +1,7 @@
+# Git Ignore
+node_modules/
+.vscode/
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
