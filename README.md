@@ -1,53 +1,62 @@
-# Steam Curators Sync & Compare (Userscript)
+# Steam Curator Follow Tracker (Userscript)
 
-Легковесный, кроссплатформенный пользовательский скрипт для браузеров (Chrome, Firefox и др.) через Tampermonkey или Violentmonkey. Позволяет в один клик сохранять список подписок на кураторов Steam в локальную базу, экспортировать в чистый JSON и наглядно сравнивать свои подписки с базой другого пользователя.
+Кроссплатформенный (Chrome + Firefox под Tampermonkey / Violentmonkey) пользовательский скрипт для отслеживания подписок и отписок на кураторов прямо на страницах сообщества и магазина Steam.
 
 ---
 
 ## Возможности
 
-- 🔄 **Автоматический сбор подписок:** Умный скроллинг страницы кураторов Steam с извлечением ссылок, имен и счетчиков подписчиков.
-- 💾 **Локальная база данных одного пользователя:** Сохранение снимка текущего профиля (`GM_setValue` / `localStorage`) с фиксацией имени аккаунта и даты/времени последнего обновления.
-- 📤 **Экспорт в чистый JSON:** Никаких громоздких и устаревших Excel-файлов — только структурированный JSON.
-- ⚖️ **Визуальное сравнение баз:**
-  - Загрузка чужого JSON-файла для мгновенного сопоставления.
-  - Отображение информации об обоих пользователях, количестве кураторов и датах их снимков.
-  - Тумблер-фильтр: **«Показать только отличающиеся»**.
-  - Раздельные бейджи статуса: 🟢 *Общий*, 🔵 *Только у вас*, 🟠 *Только у собеседника*.
-  - Прямые кликабельные ссылки на каждого куратора.
-  - Быстрый поиск по названию в реальном времени.
-- 🎨 **Steam Native UI:** Минималистичный интерфейс в темных тонах оригинального клиента Steam.
+1. **Автоматическое отслеживание в реальном времени:**
+   - Фиксирует действия подписки и отписки на страницах кураторов (`/curator/*`).
+   - Ведет локальную базу данных пользователя с привязкой к `steam_id` и имени аккаунта.
+   - Записывает дату подписки (`followedAt`) и дату отписки (`unfollowedAt`).
+2. **Информационный статус в шапке куратора:**
+   - Если **подписан**:
+     - 🟢 *Подписан: [Дата и время]* (для подписок, зафиксированных скриптом).
+     - 🟢 *Подписан: Дата неизвестна (до начала ведения базы)* (для подписок, оформленных до установки скрипта).
+   - Если **не подписан**:
+     - 🔴 *Отписан: [Дата и время]* (если ранее была оформлена отписка).
+     - ⚪ *Новый куратор (ранее не отслеживался)* (если куратор никогда не был в базе).
+3. **Выгрузка базы, отсортированной по дате подписки:**
+   - Кнопка **«📥 Скачать список кураторов (JSON)»** прямо в шапке куратора.
+   - Экспортирует JSON со всеми кураторами, отсортированными строго по дате подписки:
+     1. Сначала кураторы с известной датой подписки (от самых свежих к старым);
+     2. Затем кураторы с неизвестной датой (оформленные до начала ведения базы);
+     3. Затем отписанные кураторы (по дате отписки).
+4. **Кроссплатформенность:**
+   - Одинаково стабильно работает в Google Chrome, Mozilla Firefox, Brave, Microsoft Edge.
+   - Не имеет внешних зависимостей (`@grant GM_setValue`, `GM_getValue`, zero CDN).
 
 ---
 
-## Быстрый старт и установка
+## Установка и запуск
 
-1. Установите расширение для пользовательских скриптов:
-   - [Tampermonkey](https://www.tampermonkey.net/) (Chrome, Firefox, Edge) или [Violentmonkey](https://violentmonkey.github.io/).
-2. Создайте новый скрипт и вставьте в него содержимое файла [`steam-curators-sync.user.js`](file:///e:/%D0%98%D0%BB%D1%8C%D0%B3%D0%B8%D0%B7/Documents/VibeCoding/TM_Scripts/userscript-steam-curator/steam-curators-sync.user.js).
-3. Перейдите на страницу своих кураторов в Steam:
-   [https://store.steampowered.com/curators/mycurators/](https://store.steampowered.com/curators/mycurators/)
-4. В правом верхнем углу появится аккуратный виджет управления:
-   - Нажмите **«🔄 Собрать и сохранить базу»**, чтобы скрипт пролистал страницу и зафиксировал ваши подписки.
-   - Нажмите **«💾 Экспорт в JSON»**, чтобы сохранить файл со своей базой.
-   - Нажмите **«⚖️ Сравнить с базой JSON»**, чтобы выбрать чужой `.json` файл и увидеть различия в интерактивном окне.
+1. Установите расширение менеджера скриптов:
+   - [Tampermonkey](https://www.tampermonkey.net/) или [Violentmonkey](https://violentmonkey.github.io/).
+2. Создайте новый скрипт и вставьте в него код [`steam-curator-tracker.user.js`](file:///e:/%D0%98%D0%BB%D1%8C%D0%B3%D0%B8%D0%B7/Documents/VibeCoding/TM_Scripts/userscript-steam-curator/steam-curator-tracker.user.js).
+3. Откройте любую страницу куратора в Steam, например:
+   `https://store.steampowered.com/curator/6856593-PC-Gamer/`
+4. В шапке куратора отобразится аккуратный блок со статусом и кнопкой выгрузки.
 
 ---
 
-## Структура файла экспорта (JSON)
+## Формат экспорта (JSON)
 
 ```json
 {
   "version": 1,
   "user": "SteamUsername",
-  "updatedAt": "2026-10-19T15:00:00.000Z",
-  "total": 45,
+  "steamId": "76561198000000000",
+  "exportedAt": "2026-10-19T21:10:00.000Z",
+  "totalCurators": 15,
   "curators": [
     {
-      "id": "123456",
-      "name": "Название куратора",
-      "subs": 15400,
-      "link": "https://store.steampowered.com/curator/123456-Name/"
+      "clanId": "6856593",
+      "name": "PC Gamer",
+      "link": "https://store.steampowered.com/curator/6856593/",
+      "status": "followed",
+      "followedAt": "2026-10-19T21:05:00.000Z",
+      "unfollowedAt": null
     }
   ]
 }
@@ -55,8 +64,10 @@
 
 ---
 
-## Верификация и тесты
+## Состав репозитория
 
-- Проверка синтаксиса: `node --check steam-curators-sync.user.js`
-- Модульный тест компаратора: `node test_comparator.js`
-- Сборка дистрибутива: `powershell -ExecutionPolicy Bypass -File .\build.ps1`
+- [`steam-curator-tracker.user.js`](file:///e:/%D0%98%D0%BB%D1%8C%D0%B3%D0%B8%D0%B7/Documents/VibeCoding/TM_Scripts/userscript-steam-curator/steam-curator-tracker.user.js) — основной трекер кураторов (v2.0.0).
+- [`steam-curators-sync.user.js`](file:///e:/%D0%98%D0%BB%D1%8C%D0%B3%D0%B8%D0%B7/Documents/VibeCoding/TM_Scripts/userscript-steam-curator/steam-curators-sync.user.js) — архивный скрипт экспорта и компаратора кураторов со страницы `/mycurators` (v1.0.0).
+- [`test_tracker.js`](file:///e:/%D0%98%D0%BB%D1%8C%D0%B3%D0%B8%D0%B7/Documents/VibeCoding/TM_Scripts/userscript-steam-curator/test_tracker.js) — автоматические тесты трекера.
+- [`test_comparator.js`](file:///e:/%D0%98%D0%BB%D1%8C%D0%B3%D0%B8%D0%B7/Documents/VibeCoding/TM_Scripts/userscript-steam-curator/test_comparator.js) — тесты компаратора.
+- [`build.ps1`](file:///e:/%D0%98%D0%BB%D1%8C%D0%B3%D0%B8%D0%B7/Documents/VibeCoding/TM_Scripts/userscript-steam-curator/build.ps1) — скрипт сборки и упаковки дистрибутивов.

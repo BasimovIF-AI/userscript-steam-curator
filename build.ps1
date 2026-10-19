@@ -1,21 +1,23 @@
 # build.ps1 — Скрипт автоматизации сборки и верификации
 param(
-    [string]$Version = "1.0.0"
+    [string]$Version = "2.0.0"
 )
 
 $ErrorActionPreference = "Stop"
 
 Write-Host "==> [1/3] Проверка синтаксиса JavaScript..." -ForegroundColor Cyan
+node --check steam-curator-tracker.user.js
 node --check steam-curators-sync.user.js
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "Ошибка синтаксиса в steam-curators-sync.user.js"
+    Write-Error "Ошибка синтаксиса в юзерскриптах!"
     exit 1
 }
 
-Write-Host "==> [2/3] Запуск тестов компаратора..." -ForegroundColor Cyan
+Write-Host "==> [2/3] Запуск автоматических тестов..." -ForegroundColor Cyan
+node test_tracker.js
 node test_comparator.js
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "Тесты компаратора не пройдены!"
+    Write-Error "Тесты не пройдены!"
     exit 1
 }
 
@@ -25,7 +27,7 @@ if (-not (Test-Path $archiveDir)) {
     New-Item -ItemType Directory -Path $archiveDir | Out-Null
 }
 
-$zipName = "steam-curators-sync_v$Version`_src.zip"
+$zipName = "steam-curator-tracker_v$Version`_src.zip"
 $zipPath = Join-Path $archiveDir $zipName
 
 if (Test-Path $zipPath) {
@@ -33,10 +35,12 @@ if (Test-Path $zipPath) {
 }
 
 $filesToArchive = @(
+    "steam-curator-tracker.user.js",
     "steam-curators-sync.user.js",
     "README.md",
     "CHANGELOG.md",
     "AGENTS.md",
+    "test_tracker.js",
     "test_comparator.js",
     "build.ps1"
 )
