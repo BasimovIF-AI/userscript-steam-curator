@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Steam Curator Follow Tracker
 // @namespace    https://github.com/BasimovIF-AI/userscript-steam-curator
-// @version      2.2.0
-// @description  Отслеживание подписок/отписок на кураторов Steam, учет дат, первичная инициализация, импорт и экспорт базы
+// @version      2.3.0
+// @description  Отслеживание подписок/отписок на кураторов Steam, учет дат, менеджер ревизии и отписок, импорт и экспорт базы
 // @author       Senior Software Engineer
 // @match        *://store.steampowered.com/curator/*
 // @match        *://store.steampowered.com/curators/mycurators*
@@ -16,6 +16,7 @@
 
     const WIDGET_ID = 'steam-curator-tracker-panel';
     const MYCURATORS_PANEL_ID = 'steam-curator-tracker-mycurators-panel';
+    const MODAL_VIEWER_ID = 'steam-curator-viewer-modal';
     const STYLES_ID = 'steam-curator-tracker-styles';
 
     // -------------------------------------------------------------------------
@@ -102,14 +103,17 @@
         return style.display !== 'none' && unfollowBtn.offsetParent !== null;
     }
 
-    function formatDate(isoStr) {
+    function formatDate(isoStr, onlyDate = false) {
         if (!isoStr) return null;
         try {
             const d = new Date(isoStr);
-            return isNaN(d.getTime()) ? isoStr : d.toLocaleString('ru-RU', {
-                day: '2-digit', month: '2-digit', year: 'numeric',
-                hour: '2-digit', minute: '2-digit'
-            });
+            if (isNaN(d.getTime())) return isoStr;
+            const options = { day: '2-digit', month: '2-digit', year: 'numeric' };
+            if (!onlyDate) {
+                options.hour = '2-digit';
+                options.minute = '2-digit';
+            }
+            return d.toLocaleString('ru-RU', options);
         } catch (_) {
             return isoStr;
         }
@@ -169,7 +173,7 @@
             existing.status = 'followed';
             existing.followedAt = now;
             existing.unfollowedAt = null;
-            existing.isInitial = false; // оформлено вручную позже
+            existing.isInitial = false;
         } else {
             existing.status = 'unfollowed';
             existing.unfollowedAt = now;
@@ -182,27 +186,26 @@
         updateCuratorPageUI();
     }
 
-    function getSortedCurators(curatorsMap = {}) {
+    function getSortedCurators(curatorsMap = {}, order = 'newest') {
         return Object.values(curatorsMap).sort((a, b) => {
             const aFollowed = a.status === 'followed';
             const bFollowed = b.status === 'followed';
 
-            // 1. Сначала все активные подписки, затем отписанные
             if (aFollowed !== bFollowed) {
                 return aFollowed ? -1 : 1;
             }
 
             if (aFollowed) {
-                // Для активных подписок: сначала с известной датой (от новых к старым)
                 if (a.followedAt && b.followedAt) {
-                    return new Date(b.followedAt) - new Date(a.followedAt);
+                    const diff = new Date(b.followedAt) - new Date(a.followedAt);
+                    return order === 'oldest' ? -diff : diff;
                 }
                 if (a.followedAt && !b.followedAt) return -1;
                 if (!a.followedAt && b.followedAt) return 1;
             } else {
-                // Для отписанных: сначала недавно отписанные
                 if (a.unfollowedAt && b.unfollowedAt) {
-                    return new Date(b.unfollowedAt) - new Date(a.unfollowedAt);
+                    const diff = new Date(b.unfollowedAt) - new Date(a.unfollowedAt);
+                    return order === 'oldest' ? -diff : diff;
                 }
                 if (a.unfollowedAt && !b.unfollowedAt) return -1;
                 if (!a.unfollowedAt && b.unfollowedAt) return 1;
@@ -214,7 +217,7 @@
 
     function exportCuratorsJSON(userInfo) {
         const db = loadDatabase(userInfo.steamId, userInfo.userName);
-        const sortedList = getSortedCurators(db.curators);
+        const sortedList = getSortedCurators(db.curators, 'newest');
 
         const exportPayload = {
             version: 1,
@@ -254,7 +257,7 @@
                 try {
                     const parsed = JSON.parse(evt.target.result);
                     if (!parsed || !Array.isArray(parsed.curators)) {
-                        throw new Error('Файл не содержит корректного массива "curators".');
+                        throw new Error('Файл не содержит массив curators');
                     }
                     const steamId = parsed.steamId || userInfo.steamId;
                     const db = {
@@ -303,8 +306,9 @@
                 font-family: "Motiva Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                 font-size: 12px;
                 color: #c6d4df;
-                max-width: 520px;
+                max-width: 460px;
                 box-sizing: border-box;
+                position: relative;
             }
             #${WIDGET_ID} .sct-status-row {
                 display: flex;
@@ -312,14 +316,15 @@
                 gap: 8px;
                 flex-wrap: wrap;
             }
-            #${WIDGET_ID} .sct-badge {
+            .sct-badge {
                 display: inline-flex;
                 align-items: center;
                 gap: 5px;
-                padding: 4px 10px;
+                padding: 4px 8px;
                 border-radius: 4px;
-                font-size: 12px;
+                font-size: 11px;
                 font-weight: 600;
+                white-space: nowrap;
             }
             .sct-badge-followed {
                 background: rgba(46, 204, 113, 0.15);
@@ -341,11 +346,10 @@
                 color: #f39c12;
                 border: 1px solid rgba(243, 156, 18, 0.4);
             }
-            #${WIDGET_ID} .sct-actions {
+            .sct-actions-row {
                 display: flex;
                 align-items: center;
-                justify-content: space-between;
-                gap: 10px;
+                gap: 8px;
                 margin-top: 2px;
             }
             .sct-btn {
@@ -376,19 +380,71 @@
             .sct-btn-primary:hover {
                 background: linear-gradient(90deg, #2196f3 0%, #1976d2 100%);
             }
-            #${WIDGET_ID} .sct-new-user-banner {
-                background: rgba(243, 156, 18, 0.12);
-                border: 1px solid rgba(243, 156, 18, 0.35);
-                border-radius: 6px;
-                padding: 8px 12px;
-                display: flex;
-                flex-direction: column;
-                gap: 6px;
-                margin-bottom: 4px;
+            .sct-btn-gear {
+                padding: 6px 9px;
+                font-size: 13px;
+                cursor: pointer;
+                background: #202b38;
+                border: 1px solid #2f4358;
+                color: #a4b4c4;
+                border-radius: 4px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
             }
-            #${WIDGET_ID} .sct-account-info {
+            .sct-btn-gear:hover {
+                color: #fff;
+                background: #2d3d50;
+                border-color: #66c0f4;
+            }
+            .sct-dropdown-menu {
+                position: absolute;
+                top: 100%;
+                right: 0;
+                margin-top: 6px;
+                background: #171d25;
+                border: 1px solid #2a475e;
+                border-radius: 6px;
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+                padding: 6px 0;
+                z-index: 10000;
+                min-width: 190px;
+                display: none;
+                flex-direction: column;
+            }
+            .sct-dropdown-menu.show {
+                display: flex;
+            }
+            .sct-dropdown-item {
+                padding: 8px 14px;
+                background: transparent;
+                border: none;
+                color: #c6d4df;
                 font-size: 11px;
+                font-weight: 500;
+                text-align: left;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            .sct-dropdown-item:hover {
+                background: #212f45;
+                color: #fff;
+            }
+            .sct-dropdown-divider {
+                height: 1px;
+                background: #233344;
+                margin: 4px 0;
+            }
+            .sct-dropdown-header {
+                padding: 6px 14px 4px 14px;
+                font-size: 10px;
                 color: #899bb0;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
             }
 
             /* Панель на странице /curators/mycurators */
@@ -407,19 +463,154 @@
                 font-size: 13px;
                 width: 300px;
                 backdrop-filter: blur(8px);
+                position: fixed;
             }
             #${MYCURATORS_PANEL_ID} h4 {
                 margin: 0 0 10px 0;
                 font-size: 14px;
                 color: #66c0f4;
             }
-            #${MYCURATORS_PANEL_ID} .mycurators-desc {
-                font-size: 11px;
-                color: #899bb0;
-                line-height: 1.4;
-                margin-bottom: 12px;
+
+            /* Модальное окно просмотра и отписки */
+            #${MODAL_VIEWER_ID} {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(0, 0, 0, 0.78);
+                backdrop-filter: blur(4px);
+                z-index: 1000000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-family: "Motiva Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                color: #c6d4df;
             }
-            #${MYCURATORS_PANEL_ID} .mycurators-desc b {
+            #${MODAL_VIEWER_ID} .sct-modal-card {
+                background: #171d25;
+                border: 1px solid #2a475e;
+                border-radius: 10px;
+                width: 880px;
+                max-width: 95vw;
+                height: 85vh;
+                display: flex;
+                flex-direction: column;
+                box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8);
+                overflow: hidden;
+            }
+            #${MODAL_VIEWER_ID} .sct-modal-header {
+                padding: 14px 20px;
+                background: #1b2838;
+                border-bottom: 1px solid #2a475e;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+            }
+            #${MODAL_VIEWER_ID} .sct-modal-header h3 {
+                margin: 0;
+                font-size: 16px;
+                color: #66c0f4;
+            }
+            #${MODAL_VIEWER_ID} .sct-close-btn {
+                background: transparent;
+                border: none;
+                color: #899bb0;
+                font-size: 22px;
+                cursor: pointer;
+                line-height: 1;
+            }
+            #${MODAL_VIEWER_ID} .sct-close-btn:hover {
+                color: #fff;
+            }
+            #${MODAL_VIEWER_ID} .sct-modal-toolbar {
+                padding: 10px 20px;
+                background: #121820;
+                border-bottom: 1px solid #233344;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                flex-wrap: wrap;
+                gap: 12px;
+            }
+            #${MODAL_VIEWER_ID} .sct-toolbar-left {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+            }
+            #${MODAL_VIEWER_ID} .sct-select-sort {
+                background: #1b2634;
+                border: 1px solid #2a475e;
+                color: #e1e7ee;
+                border-radius: 4px;
+                padding: 5px 10px;
+                font-size: 12px;
+                outline: none;
+                cursor: pointer;
+            }
+            #${MODAL_VIEWER_ID} .sct-search-input {
+                background: #0d1217;
+                border: 1px solid #2a475e;
+                border-radius: 4px;
+                color: #fff;
+                padding: 6px 12px;
+                font-size: 12px;
+                outline: none;
+                width: 200px;
+            }
+            #${MODAL_VIEWER_ID} .sct-search-input:focus {
+                border-color: #66c0f4;
+            }
+            #${MODAL_VIEWER_ID} .sct-modal-body {
+                flex: 1;
+                overflow-y: auto;
+                padding: 10px 20px;
+            }
+            #${MODAL_VIEWER_ID} table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 12px;
+            }
+            #${MODAL_VIEWER_ID} th {
+                position: sticky;
+                top: 0;
+                background: #171d25;
+                padding: 10px 8px;
+                text-align: left;
+                border-bottom: 2px solid #2a475e;
+                color: #899bb0;
+                font-weight: 600;
+                z-index: 2;
+            }
+            #${MODAL_VIEWER_ID} td {
+                padding: 9px 8px;
+                border-bottom: 1px solid #212c3b;
+            }
+            #${MODAL_VIEWER_ID} tr:hover td {
+                background: rgba(255, 255, 255, 0.03);
+            }
+            .sct-link {
+                color: #66c0f4;
+                text-decoration: none;
+                font-weight: 500;
+            }
+            .sct-link:hover {
+                text-decoration: underline;
+                color: #a4d007;
+            }
+            .sct-btn-unfollow {
+                background: rgba(231, 76, 60, 0.2);
+                color: #ff6b6b;
+                border: 1px solid rgba(231, 76, 60, 0.4);
+                padding: 4px 10px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 11px;
+                font-weight: 600;
+                transition: background 0.15s, border-color 0.15s;
+            }
+            .sct-btn-unfollow:hover {
+                background: #e74c3c;
                 color: #fff;
             }
         `;
@@ -430,7 +621,182 @@
     }
 
     // -------------------------------------------------------------------------
-    // Модуль 1: Страница отдельного куратора (/curator/*)
+    // Модуль 1: Интерактивный просмотр кураторов (Ревизия и отписка)
+    // -------------------------------------------------------------------------
+    function renderCuratorsViewerModal(userInfo) {
+        const old = document.getElementById(MODAL_VIEWER_ID);
+        if (old) old.remove();
+
+        injectStyles();
+
+        const db = loadDatabase(userInfo.steamId, userInfo.userName);
+        const modal = document.createElement('div');
+        modal.id = MODAL_VIEWER_ID;
+
+        modal.innerHTML = `
+            <div class="sct-modal-card">
+                <div class="sct-modal-header">
+                    <h3>📋 Ревизия кураторов: ${escapeHtml(db.user)}</h3>
+                    <button class="sct-close-btn" id="sct-viewer-close" title="Закрыть">&times;</button>
+                </div>
+                <div class="sct-modal-toolbar">
+                    <div class="sct-toolbar-left">
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px;">
+                            <input type="checkbox" id="sct-toggle-active-only" checked style="accent-color:#66c0f4;">
+                            <span>Только активные подписки</span>
+                        </label>
+                        <select class="sct-select-sort" id="sct-select-sort">
+                            <option value="oldest">⏳ Сначала старые (для отписки)</option>
+                            <option value="newest">⏱️ Сначала новые</option>
+                        </select>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <input type="text" class="sct-search-input" id="sct-viewer-search" placeholder="Поиск по названию...">
+                        <span id="sct-viewer-counter" style="font-size:11px; color:#899bb0;"></span>
+                    </div>
+                </div>
+                <div class="sct-modal-body">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 140px;">Дата подписки</th>
+                                <th>Куратор</th>
+                                <th style="width: 130px; text-align: right;">Действие</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sct-viewer-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        const tbody = modal.querySelector('#sct-viewer-tbody');
+        const activeOnlyToggle = modal.querySelector('#sct-toggle-active-only');
+        const sortSelect = modal.querySelector('#sct-select-sort');
+        const searchInput = modal.querySelector('#sct-viewer-search');
+        const counterEl = modal.querySelector('#sct-viewer-counter');
+
+        function updateList() {
+            const currentDb = loadDatabase(userInfo.steamId, userInfo.userName);
+            const order = sortSelect.value;
+            const onlyActive = activeOnlyToggle.checked;
+            const query = searchInput.value.toLowerCase().trim();
+
+            const sorted = getSortedCurators(currentDb.curators, order);
+            const filtered = sorted.filter(c => {
+                if (onlyActive && c.status !== 'followed') return false;
+                if (query && !(c.name || '').toLowerCase().includes(query)) return false;
+                return true;
+            });
+
+            counterEl.innerText = `Показано: ${filtered.length} из ${Object.keys(currentDb.curators).length}`;
+
+            if (!filtered.length) {
+                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; padding:40px; color:#899bb0;">Кураторы не найдены.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(c => {
+                const dateText = c.followedAt ? formatDate(c.followedAt, true) : 'Неизвестно';
+                const isFollowed = c.status === 'followed';
+
+                let actionHtml = '';
+                if (isFollowed) {
+                    actionHtml = `<button class="sct-btn-unfollow" data-clanid="${c.clanId}">❌ Отписаться</button>`;
+                } else {
+                    const unfollowDate = c.unfollowedAt ? formatDate(c.unfollowedAt, true) : '';
+                    actionHtml = `<span class="sct-badge sct-badge-unfollowed">🔴 Отписан ${unfollowDate}</span>`;
+                }
+
+                return `
+                    <tr id="sct-row-${c.clanId}">
+                        <td style="color:#899bb0; font-variant-numeric:tabular-nums;">
+                            ${dateText}
+                            ${c.isInitial ? '<br><small style="color:#66c0f4;">(создание БД)</small>' : ''}
+                        </td>
+                        <td>
+                            <a href="${c.link}" target="_blank" rel="noopener noreferrer" class="sct-link">
+                                ${escapeHtml(c.name)} ↗
+                            </a>
+                        </td>
+                        <td style="text-align: right;" class="sct-col-action">
+                            ${actionHtml}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Привязка обработчиков отписки
+            tbody.querySelectorAll('.sct-btn-unfollow').forEach(btn => {
+                btn.onclick = function() {
+                    const clanId = this.dataset.clanid;
+                    const row = document.getElementById(`sct-row-${clanId}`);
+                    handleUnfollow(clanId, row);
+                };
+            });
+        }
+
+        function handleUnfollow(clanId, rowEl) {
+            if (!confirm('Отписаться от этого куратора в Steam?')) return;
+
+            // Вызываем нативную функцию Steam
+            if (typeof unsafeWindow !== 'undefined' && typeof unsafeWindow.FollowCurator === 'function') {
+                try {
+                    unsafeWindow.FollowCurator(clanId, false);
+                } catch (e) {
+                    console.warn('[CuratorTracker] Ошибка вызова FollowCurator:', e);
+                }
+            }
+
+            // Фиксируем отписку в локальной базе
+            const currentDb = loadDatabase(userInfo.steamId, userInfo.userName);
+            if (currentDb.curators[clanId]) {
+                currentDb.curators[clanId].status = 'unfollowed';
+                currentDb.curators[clanId].unfollowedAt = new Date().toISOString();
+                saveDatabase(currentDb);
+            }
+
+            const actionCell = rowEl?.querySelector('.sct-col-action');
+            if (actionCell) {
+                actionCell.innerHTML = '<span class="sct-badge sct-badge-unfollowed">🔴 Отписан</span>';
+            }
+
+            if (activeOnlyToggle.checked && rowEl) {
+                rowEl.style.transition = 'opacity 0.3s, transform 0.3s';
+                rowEl.style.opacity = '0';
+                rowEl.style.transform = 'translateX(20px)';
+                setTimeout(() => rowEl.remove(), 300);
+            }
+
+            // Синхронизируем виджет на заднем плане
+            updateCuratorPageUI();
+        }
+
+        activeOnlyToggle.onchange = updateList;
+        sortSelect.onchange = updateList;
+        searchInput.oninput = updateList;
+
+        const closeModal = () => modal.remove();
+        modal.querySelector('#sct-viewer-close').onclick = closeModal;
+        modal.onclick = (e) => {
+            if (e.target === modal) closeModal();
+        };
+
+        const escHandler = (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+                document.removeEventListener('keydown', escHandler);
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+
+        updateList();
+    }
+
+    // -------------------------------------------------------------------------
+    // Модуль 2: Страница отдельного куратора (/curator/*)
     // -------------------------------------------------------------------------
     function updateCuratorPageUI() {
         if (!window.location.pathname.startsWith('/curator/')) return;
@@ -499,9 +865,9 @@
         let newUserBanner = '';
         if (!userHasDb && userInfo.steamId !== 'anonymous') {
             newUserBanner = `
-                <div class="sct-new-user-banner">
+                <div style="background:rgba(243,156,18,0.12); border:1px solid rgba(243,156,18,0.35); border-radius:6px; padding:8px 12px; margin-bottom:6px;">
                     <span>⚠️ Новый профиль: <b>${escapeHtml(userInfo.userName)}</b>.<br>База кураторов еще не создана.</span>
-                    <a href="https://store.steampowered.com/curators/mycurators/?sct_init=1" class="sct-btn sct-btn-primary" style="justify-content:center;">
+                    <a href="https://store.steampowered.com/curators/mycurators/?sct_init=1" class="sct-btn sct-btn-primary" style="justify-content:center; margin-top:6px;">
                         🚀 Создать базу (обход кураторки)
                     </a>
                 </div>
@@ -514,32 +880,50 @@
             <div class="sct-status-row">
                 ${badgeHtml}
             </div>
-            <div class="sct-actions">
-                <button class="sct-btn" id="sct-btn-export" title="Скачать базу в JSON">
-                    💾 Экспорт
+            <div class="sct-actions-row">
+                <button class="sct-btn sct-btn-primary" id="sct-btn-view-list" style="flex:1; justify-content:center;">
+                    📋 Список кураторов (${totalTracked})
                 </button>
-                <button class="sct-btn" id="sct-btn-import" title="Загрузить базу из JSON">
-                    📥 Импорт
-                </button>
-                <span class="sct-account-info">
-                    База: <b>${escapeHtml(db.user)}</b> (${totalTracked})
-                </span>
+                <button class="sct-btn-gear" id="sct-btn-gear" title="Настройки и база">⚙️</button>
+
+                <div class="sct-dropdown-menu" id="sct-gear-menu">
+                    <div class="sct-dropdown-header">Профиль: ${escapeHtml(db.user)}</div>
+                    <button class="sct-dropdown-item" id="sct-menu-export">💾 Экспорт базы (JSON)</button>
+                    <button class="sct-dropdown-item" id="sct-menu-import">📥 Импорт базы (JSON)</button>
+                    <div class="sct-dropdown-divider"></div>
+                    <button class="sct-dropdown-item" id="sct-menu-rescan">🚀 Перейти к кураторам</button>
+                </div>
             </div>
         `;
 
-        const exportBtn = widget.querySelector('#sct-btn-export');
-        if (exportBtn) {
-            exportBtn.onclick = () => exportCuratorsJSON(userInfo);
-        }
+        widget.querySelector('#sct-btn-view-list').onclick = () => renderCuratorsViewerModal(userInfo);
 
-        const importBtn = widget.querySelector('#sct-btn-import');
-        if (importBtn) {
-            importBtn.onclick = () => importCuratorsJSON(userInfo, () => updateCuratorPageUI());
-        }
+        const gearBtn = widget.querySelector('#sct-btn-gear');
+        const gearMenu = widget.querySelector('#sct-gear-menu');
+        gearBtn.onclick = (e) => {
+            e.stopPropagation();
+            gearMenu.classList.toggle('show');
+        };
+
+        widget.querySelector('#sct-menu-export').onclick = () => {
+            gearMenu.classList.remove('show');
+            exportCuratorsJSON(userInfo);
+        };
+        widget.querySelector('#sct-menu-import').onclick = () => {
+            gearMenu.classList.remove('show');
+            importCuratorsJSON(userInfo, () => updateCuratorPageUI());
+        };
+        widget.querySelector('#sct-menu-rescan').onclick = () => {
+            window.location.href = 'https://store.steampowered.com/curators/mycurators/';
+        };
+
+        document.addEventListener('click', () => {
+            gearMenu.classList.remove('show');
+        }, { once: true });
     }
 
     // -------------------------------------------------------------------------
-    // Модуль 2: Обход кураторки и заведение базы (/curators/mycurators)
+    // Модуль 3: Страница всех подписок (/curators/mycurators)
     // -------------------------------------------------------------------------
     async function autoScrollCurators(progressCb) {
         let lastHeight = document.body.scrollHeight;
@@ -595,7 +979,6 @@
             btnEl.innerHTML = '⚙️ <span>Заведение базы...</span>';
             const scraped = scrapeMyCurators();
 
-            // Создаем или загружаем существующую базу
             const existingDb = storage.get(getStorageKey(userInfo.steamId), null);
             const createdAt = existingDb?.createdAt || new Date().toISOString();
 
@@ -608,7 +991,6 @@
                 curators: existingDb?.curators || {}
             };
 
-            // У кураторов из этого первого обхода дата подписки = дата создания БД
             let addedCount = 0;
             for (const item of scraped) {
                 if (!db.curators[item.clanId]) {
@@ -617,19 +999,18 @@
                         name: item.name,
                         link: item.link,
                         status: 'followed',
-                        followedAt: createdAt, // Самая ранняя дата — дата создания базы!
+                        followedAt: createdAt,
                         unfollowedAt: null,
                         isInitial: true
                     };
                     addedCount++;
                 } else if (db.curators[item.clanId].status === 'unfollowed') {
-                    // Если пользователь снова подписан
                     db.curators[item.clanId].status = 'followed';
                 }
             }
 
             saveDatabase(db);
-            alert(`✅ База кураторов успешно создана!\nПользователь: ${userInfo.userName}\nВсего кураторов: ${Object.keys(db.curators).length} (новых добавлено: ${addedCount})\nДата создания базы: ${formatDate(createdAt)}`);
+            alert(`✅ База кураторов успешно сохранена!\nПользователь: ${userInfo.userName}\nВсего кураторов: ${Object.keys(db.curators).length} (новых добавлено: ${addedCount})\nДата создания базы: ${formatDate(createdAt)}`);
             renderMyCuratorsPanel();
         } catch (err) {
             console.error('[CuratorTracker] Ошибка сканирования:', err);
@@ -659,20 +1040,17 @@
         let statusText = '';
         if (userHasDb) {
             statusText = `
-                <div class="mycurators-desc">
+                <div style="font-size:11px; color:#899bb0; line-height:1.4; margin-bottom:12px;">
                     👤 Пользователь: <b>${escapeHtml(db.user)}</b><br>
                     📦 В базе: <b>${total}</b> кураторов<br>
                     📅 Дата создания БД: <b>${formatDate(db.createdAt)}</b>
                 </div>
-                <button class="sct-btn sct-btn-primary" id="sct-btn-rescan" style="width:100%; justify-content:center; margin-bottom:8px;">
-                    🔄 Обновить базу кураторов
-                </button>
             `;
         } else {
             statusText = `
-                <div class="mycurators-desc">
+                <div style="font-size:11px; color:#f39c12; line-height:1.4; margin-bottom:12px;">
                     ⚠️ <b>Новый пользователь!</b> База кураторов еще не заведена.<br>
-                    Нажмите кнопку ниже, чтобы автоматически пройти по странице ваших подписок и завести базу данных с самой ранней датой.
+                    Нажмите кнопку ниже, чтобы автоматически собрать подписки и завести базу.
                 </div>
                 <button class="sct-btn sct-btn-primary" id="sct-btn-init-scan" style="width:100%; justify-content:center; margin-bottom:8px;">
                     🚀 Начать первичный обход кураторки
@@ -681,34 +1059,61 @@
         }
 
         panel.innerHTML = `
-            <h4>🛡️ Трекер кураторов Steam</h4>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+                <h4 style="margin:0; font-size:14px; color:#66c0f4;">🛡️ Трекер кураторов Steam</h4>
+                <button class="sct-btn-gear" id="sct-panel-gear" title="Настройки">⚙️</button>
+            </div>
             ${statusText}
             <div style="display:flex; gap:6px;">
-                <button class="sct-btn" id="sct-btn-export-all" style="flex:1; justify-content:center;">
-                    💾 Экспорт
+                <button class="sct-btn sct-btn-primary" id="sct-btn-panel-view" style="flex:1; justify-content:center;">
+                    📋 Список кураторов
                 </button>
-                <button class="sct-btn" id="sct-btn-import-all" style="flex:1; justify-content:center;">
-                    📥 Импорт
-                </button>
-                <button class="sct-btn" id="sct-btn-go-back" style="flex:1; justify-content:center;">
+                <button class="sct-btn" id="sct-btn-go-back" style="justify-content:center;">
                     🔙 Назад
                 </button>
             </div>
+
+            <div class="sct-dropdown-menu" id="sct-panel-gear-menu" style="right:16px; top:45px;">
+                <div class="sct-dropdown-header">Управление базой</div>
+                <button class="sct-dropdown-item" id="sct-panel-export">💾 Экспорт базы (JSON)</button>
+                <button class="sct-dropdown-item" id="sct-panel-import">📥 Импорт базы (JSON)</button>
+                <div class="sct-dropdown-divider"></div>
+                <button class="sct-dropdown-item" id="sct-panel-rescan">🔄 Пересканировать кураторов</button>
+            </div>
         `;
 
-        const initBtn = panel.querySelector('#sct-btn-init-scan') || panel.querySelector('#sct-btn-rescan');
+        panel.querySelector('#sct-btn-panel-view').onclick = () => renderCuratorsViewerModal(userInfo);
+
+        const gearBtn = panel.querySelector('#sct-panel-gear');
+        const gearMenu = panel.querySelector('#sct-panel-gear-menu');
+        gearBtn.onclick = (e) => {
+            e.stopPropagation();
+            gearMenu.classList.toggle('show');
+        };
+
+        panel.querySelector('#sct-panel-export').onclick = () => {
+            gearMenu.classList.remove('show');
+            exportCuratorsJSON(userInfo);
+        };
+        panel.querySelector('#sct-panel-import').onclick = () => {
+            gearMenu.classList.remove('show');
+            importCuratorsJSON(userInfo, () => renderMyCuratorsPanel());
+        };
+        panel.querySelector('#sct-panel-rescan').onclick = function() {
+            gearMenu.classList.remove('show');
+            executeInitialScan(this);
+        };
+        panel.querySelector('#sct-btn-go-back').onclick = () => {
+            if (window.history.length > 1) window.history.back();
+            else window.location.href = 'https://store.steampowered.com/';
+        };
+
+        const initBtn = panel.querySelector('#sct-btn-init-scan');
         if (initBtn) {
             initBtn.onclick = function() {
                 executeInitialScan(this);
             };
         }
-
-        panel.querySelector('#sct-btn-export-all').onclick = () => exportCuratorsJSON(userInfo);
-        panel.querySelector('#sct-btn-import-all').onclick = () => importCuratorsJSON(userInfo, () => renderMyCuratorsPanel());
-        panel.querySelector('#sct-btn-go-back').onclick = () => {
-            if (window.history.length > 1) window.history.back();
-            else window.location.href = 'https://store.steampowered.com/';
-        };
 
         // Автоматический запуск первичного обхода, если пришли с параметром ?sct_init=1
         if (window.location.search.includes('sct_init=1') && !userHasDb) {
@@ -745,7 +1150,6 @@
                 const curatorInfo = getCuratorInfo();
                 const userInfo = getUserInfo();
 
-                // Небольшая задержка, чтобы дать Steam сменить видимость кнопок
                 setTimeout(() => {
                     recordFollowAction(clanId, isFollow, curatorInfo, userInfo);
                 }, 300);
