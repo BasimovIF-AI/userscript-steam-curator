@@ -1,6 +1,6 @@
 const assert = require('assert');
 
-// Воспроизводим функцию сортировки кураторов из трекера
+// Воспроизводим ключевые функции движка из steam-curator-tracker.user.js
 function getSortedCurators(curatorsMap = {}, order = 'newest') {
     return Object.values(curatorsMap).sort((a, b) => {
         const aFollowed = a.status === 'followed';
@@ -30,8 +30,44 @@ function getSortedCurators(curatorsMap = {}, order = 'newest') {
     });
 }
 
-// Тест 1: Первичная инициализация базы нового пользователя
-console.log('Тест 1: Проверка заведения базы нового пользователя и обхода кураторки...');
+function getActiveFollowedCount(curatorsMap = {}) {
+    return Object.values(curatorsMap).filter(c => c && c.status === 'followed').length;
+}
+
+function simulateAutoUpdateVisit(record, settings, isNavigatedFromOurList, sessionSet = new Set()) {
+    if (!settings.autoUpdateOnVisit) return false;
+    if (isNavigatedFromOurList) return false;
+    if (!record || record.status !== 'followed') return false;
+    if (sessionSet.has(record.clanId)) return false;
+
+    sessionSet.add(record.clanId);
+
+    const now = new Date();
+    if (record.followedAt) {
+        const prevTime = new Date(record.followedAt).getTime();
+        if (!isNaN(prevTime) && (now.getTime() - prevTime < 5 * 60 * 1000)) {
+            return false;
+        }
+    }
+
+    record._prevFollowedAt = record.followedAt || null;
+    record.followedAt = now.toISOString();
+    record.isAutoUpdated = true;
+    return true;
+}
+
+function simulateUndoAutoUpdate(record) {
+    if (!record || !record._prevFollowedAt) return false;
+    record.followedAt = record._prevFollowedAt;
+    delete record._prevFollowedAt;
+    record.isAutoUpdated = false;
+    return true;
+}
+
+// -----------------------------------------------------------------------------
+// Тест 1: Первичная база данных
+// -----------------------------------------------------------------------------
+console.log('Тест 1: Проверка заведения базы нового пользователя и структуры данных...');
 const dbCreatedAt = "2025-02-12T00:00:00.000Z";
 const database = {
     version: 1,
@@ -47,7 +83,9 @@ const database = {
     }
 };
 
+// -----------------------------------------------------------------------------
 // Тест 2: Сортировка "Сначала старые" (для отписки)
+// -----------------------------------------------------------------------------
 console.log('Тест 2: Проверка режима "Сначала старые" (для отписки)...');
 const sortedOldest = getSortedCurators(database.curators, 'oldest');
 assert.strictEqual(sortedOldest[0].clanId, "10", "Первым должен идти самый старый активный куратор (PobreGamer от 12.02.2025)");
@@ -55,7 +93,9 @@ assert.strictEqual(sortedOldest[1].clanId, "20", "Вторым должен ид
 assert.strictEqual(sortedOldest[2].clanId, "30", "Третьим должен идти недавний куратор от 19.10.2026");
 assert.strictEqual(sortedOldest[3].clanId, "40", "Отписанный должен идти в самом конце");
 
+// -----------------------------------------------------------------------------
 // Тест 3: Сортировка "Сначала новые" (для экспорта)
+// -----------------------------------------------------------------------------
 console.log('Тест 3: Проверка режима "Сначала новые"...');
 const sortedNewest = getSortedCurators(database.curators, 'newest');
 assert.strictEqual(sortedNewest[0].clanId, "30", "Первым должен идти самый свежий куратор от 19.10.2026");
@@ -63,4 +103,62 @@ assert.strictEqual(sortedNewest[1].clanId, "20", "Вторым должен ид
 assert.strictEqual(sortedNewest[2].clanId, "10", "Третьим должен идти PobreGamer от 12.02.2025");
 assert.strictEqual(sortedNewest[3].clanId, "40", "Отписанный в самом конце");
 
-console.log('✅ Все тесты трекера (включая ревизию старых кураторов) успешно пройдены!');
+// -----------------------------------------------------------------------------
+// Тест 4: Расчет активных подписок (лимит X/100) и декремент при отписке
+// -----------------------------------------------------------------------------
+console.log('Тест 4: Проверка счетчика активных подписок (X/100)...');
+let activeCount = getActiveFollowedCount(database.curators);
+assert.strictEqual(activeCount, 3, "Активных подписок должно быть ровно 3 (отписанный не учитывается)");
+assert.strictEqual(`(${activeCount}/100)`, "(3/100)", "Формат кнопки должен быть (3/100)");
+
+// Имитируем отписку от куратора "20"
+database.curators["20"].status = 'unfollowed';
+database.curators["20"].unfollowedAt = new Date().toISOString();
+activeCount = getActiveFollowedCount(database.curators);
+assert.strictEqual(activeCount, 2, "После отписки счетчик должен мгновенно уменьшиться до 2");
+assert.strictEqual(`(${activeCount}/100)`, "(2/100)", "Кнопка должна отображать (2/100)");
+
+// Возвращаем обратно для следующих тестов
+database.curators["20"].status = 'followed';
+
+// -----------------------------------------------------------------------------
+// Тест 5: Автообновление даты подписки при переходе и отмена (Undo)
+// -----------------------------------------------------------------------------
+console.log('Тест 5: Проверка логики автообновления даты и ручной отмены (Undo)...');
+const testCurator = {
+    clanId: "99",
+    name: "Test Curator",
+    status: 'followed',
+    followedAt: "2025-05-01T00:00:00.000Z",
+    unfollowedAt: null
+};
+
+// 5.1 Обычный переход с включенной настройкой
+const session = new Set();
+const settings = { autoUpdateOnVisit: true };
+const updated = simulateAutoUpdateVisit(testCurator, settings, false, session);
+assert.strictEqual(updated, true, "Дата должна обновиться при обычном визите");
+assert.strictEqual(testCurator._prevFollowedAt, "2025-05-01T00:00:00.000Z", "Предыдущая дата должна сохраниться в _prevFollowedAt");
+assert.strictEqual(testCurator.isAutoUpdated, true, "Флаг isAutoUpdated должен быть true");
+assert.notStrictEqual(testCurator.followedAt, "2025-05-01T00:00:00.000Z", "Текущая дата должна стать сегодняшней");
+
+// 5.2 Ручная отмена (Undo)
+const undone = simulateUndoAutoUpdate(testCurator);
+assert.strictEqual(undone, true, "Отмена должна успешно восстановить дату");
+assert.strictEqual(testCurator.followedAt, "2025-05-01T00:00:00.000Z", "Дата должна вернуться к исходной");
+assert.strictEqual(testCurator._prevFollowedAt, undefined, "Поле _prevFollowedAt должно быть удалено");
+assert.strictEqual(testCurator.isAutoUpdated, false, "Флаг isAutoUpdated должен быть сброшен в false");
+
+// 5.3 Переход из нашей таблицы (isNavigatedFromOurList === true)
+const session2 = new Set();
+const bypassed = simulateAutoUpdateVisit(testCurator, settings, true, session2);
+assert.strictEqual(bypassed, false, "При переходе из таблицы дата не должна обновляться!");
+assert.strictEqual(testCurator.followedAt, "2025-05-01T00:00:00.000Z", "Дата должна остаться неизменной");
+
+// 5.4 Отключенная настройка автообновления
+const session3 = new Set();
+const settingsDisabled = { autoUpdateOnVisit: false };
+const disabledUpdate = simulateAutoUpdateVisit(testCurator, settingsDisabled, false, session3);
+assert.strictEqual(disabledUpdate, false, "При отключенной настройке дата не должна обновляться");
+
+console.log('✅ Все тесты трекера (включая лимит X/100, автообновление и отмену) успешно пройдены!');
