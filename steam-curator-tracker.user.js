@@ -1,11 +1,14 @@
 // ==UserScript==
 // @name         Steam Curator Follow Tracker
 // @namespace    https://github.com/BasimovIF-AI/userscript-steam-curator
-// @version      2.4.0
-// @description  Отслеживание подписок/отписок Steam, точный лимит (X/100), бесшовный нативный UI, автообновление даты подписки при переходе с кнопкой отмены, менеджер ревизии и портал настроек
+// @version      2.5.0
+// @description  Отслеживание подписок/отписок Steam (/curator/*, /developer/*, /publisher/*, /franchise/*), лимит (X/100), бесшовный UI, автообновление дат, ревизия и портал настроек
 // @author       Senior Software Engineer
 // @match        *://store.steampowered.com/curator/*
 // @match        *://store.steampowered.com/curators/mycurators*
+// @match        *://store.steampowered.com/developer/*
+// @match        *://store.steampowered.com/publisher/*
+// @match        *://store.steampowered.com/franchise/*
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @run-at       document-idle
@@ -97,21 +100,48 @@
         };
     }
 
+    function isCuratorOrCreatorPage() {
+        const p = window.location.pathname;
+        return p.startsWith('/curator/') ||
+               p.startsWith('/developer/') ||
+               p.startsWith('/publisher/') ||
+               p.startsWith('/franchise/');
+    }
+
     function getCuratorInfo() {
         const followBtn = document.querySelector('[id^="CuratorFollowBtn_"]');
         const unfollowBtn = document.querySelector('[id^="CuratorUnFollowBtn_"]');
         const clanId = followBtn?.id?.replace('CuratorFollowBtn_', '') ||
                        unfollowBtn?.id?.replace('CuratorUnFollowBtn_', '') ||
+                       document.querySelector('[data-clanid]')?.getAttribute('data-clanid') ||
+                       (typeof unsafeWindow !== 'undefined' && (unsafeWindow.g_clanAccountID || unsafeWindow.g_rgCurator?.clanid)) ||
                        window.location.pathname.match(/\/curator\/(\d+)/)?.[1] ||
                        null;
 
         const nameEl = document.querySelector('.curator_name a') ||
                        document.querySelector('.pageheader.curator_name') ||
-                       document.querySelector('.curator_name');
-        const name = nameEl?.textContent?.trim() || 'Unknown Curator';
-        const link = clanId ? `https://store.steampowered.com/curator/${clanId}/` : window.location.href.split('?')[0];
+                       document.querySelector('.curator_name') ||
+                       document.querySelector('.creator_name') ||
+                       document.querySelector('.page_title_area .page_title') ||
+                       document.querySelector('.creator_home_header .creator_name');
+        
+        let name = nameEl?.textContent?.trim();
+        if (!name) {
+            const ogTitle = document.querySelector('meta[property="og:title"]')?.getAttribute('content');
+            if (ogTitle) {
+                name = ogTitle.replace(/\s*на Steam.*$/i, '').replace(/\s*on Steam.*$/i, '').trim();
+            }
+        }
+        if (!name) {
+            name = document.title ? document.title.replace(/\s*на Steam.*$/i, '').replace(/\s*on Steam.*$/i, '').trim() : 'Unknown Creator';
+        }
 
-        return { clanId, name, link };
+        const cleanCurrentUrl = window.location.origin + window.location.pathname;
+        const link = (isCuratorOrCreatorPage() && !window.location.pathname.startsWith('/curator/'))
+            ? cleanCurrentUrl
+            : (clanId ? `https://store.steampowered.com/curator/${clanId}/` : cleanCurrentUrl);
+
+        return { clanId: clanId ? String(clanId) : null, name, link };
     }
 
     function isFollowedInDOM(clanId) {
@@ -1006,7 +1036,7 @@
     // Модуль 2: Страница отдельного куратора (/curator/*)
     // -------------------------------------------------------------------------
     function updateCuratorPageUI() {
-        if (!window.location.pathname.startsWith('/curator/')) return;
+        if (!isCuratorOrCreatorPage()) return;
 
         const curatorInfo = getCuratorInfo();
         if (!curatorInfo.clanId) return;
@@ -1074,6 +1104,8 @@
             const followControls = document.querySelector('.follow_controls');
             const target = followControls ||
                            document.querySelector('#header_curator_details') ||
+                           document.querySelector('.creator_home_header') ||
+                           document.querySelector('.page_content .header_area') ||
                            document.querySelector('.header_area');
             if (!target) return;
 
@@ -1369,7 +1401,7 @@
 
         // 3. Периодический мониторинг изменений DOM и первичная отрисовка
         setInterval(() => {
-            if (window.location.pathname.startsWith('/curator/')) {
+            if (isCuratorOrCreatorPage()) {
                 updateCuratorPageUI();
             } else if (window.location.pathname.startsWith('/curators/mycurators')) {
                 renderMyCuratorsPanel();

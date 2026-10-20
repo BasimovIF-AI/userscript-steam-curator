@@ -2,6 +2,17 @@
 
 Все значимые изменения в проекте документируются в этом файле согласно стандарту [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/) и [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [2.5.0] - 2026-10-21
+
+### Added
+- **Поддержка страниц Steam Creator Homes:** добавлена полноценная работа трекера на страницах разработчиков (`/developer/*`), издателей (`/publisher/*`) и франшиз (`/franchise/*`):
+  - Добавлены директивы `@match` для `store.steampowered.com/developer/*`, `store.steampowered.com/publisher/*`, `store.steampowered.com/franchise/*`.
+  - Универсальный предикат маршрутов `isCuratorOrCreatorPage()`.
+  - Извлечение `clanId` и имени создателя через кнопки подписки, атрибуты `data-clanid`, селекторы заголовков и OpenGraph метаданные (`og:title`).
+  - Сохранение канонических ссылок разработчиков/издателей в локальной базе кураторов.
+  - Точка инжекции виджета адаптирована под шапки Creator Homes (`.creator_home_header`, `.follow_controls`, `.header_area`).
+- Добавлен тест маршрутизации и валидации Creator Homes в `test_tracker.js`.
+
 ## [2.4.0] - 2026-10-20
 
 ### Added

@@ -64,6 +64,13 @@ function simulateUndoAutoUpdate(record) {
     return true;
 }
 
+function isCuratorOrCreatorPage(pathname) {
+    return pathname.startsWith('/curator/') ||
+           pathname.startsWith('/developer/') ||
+           pathname.startsWith('/publisher/') ||
+           pathname.startsWith('/franchise/');
+}
+
 // -----------------------------------------------------------------------------
 // Тест 1: Первичная база данных
 // -----------------------------------------------------------------------------
@@ -161,4 +168,15 @@ const settingsDisabled = { autoUpdateOnVisit: false };
 const disabledUpdate = simulateAutoUpdateVisit(testCurator, settingsDisabled, false, session3);
 assert.strictEqual(disabledUpdate, false, "При отключенной настройке дата не должна обновляться");
 
-console.log('✅ Все тесты трекера (включая лимит X/100, автообновление и отмену) успешно пройдены!');
+// -----------------------------------------------------------------------------
+// Тест 6: Поддержка маршрутов Steam Creator Homes (/developer/*, /publisher/*, /franchise/*)
+// -----------------------------------------------------------------------------
+console.log('Тест 6: Проверка поддержки маршрутов /developer/*, /publisher/*, /franchise/*...');
+assert.strictEqual(isCuratorOrCreatorPage('/curator/45109057-PobreGamer/'), true, "/curator/ должен поддерживаться");
+assert.strictEqual(isCuratorOrCreatorPage('/developer/russpuppy/'), true, "/developer/ должен поддерживаться");
+assert.strictEqual(isCuratorOrCreatorPage('/publisher/nd/'), true, "/publisher/ должен поддерживаться");
+assert.strictEqual(isCuratorOrCreatorPage('/franchise/tomb-raider/'), true, "/franchise/ должен поддерживаться");
+assert.strictEqual(isCuratorOrCreatorPage('/app/1091500/'), false, "Страницы игр /app/ не должны триггерить трекер");
+assert.strictEqual(isCuratorOrCreatorPage('/curators/mycurators'), false, "Страница /mycurators обрабатывается отдельной панелью");
+
+console.log('✅ Все тесты трекера (включая лимит X/100, автообновление, отмену и маршруты Creator Homes) успешно пройдены!');
