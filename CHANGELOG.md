@@ -2,6 +2,17 @@
 
 Все значимые изменения в проекте документируются в этом файле согласно стандарту [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/) и [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [2.6.0] - 2026-10-22
+
+### Changed
+- **Нативная репликация UI Steam (Pixel-Perfect Steam Native):**
+  - Геометрия виджета приведена к полному сопряжению с блоком `.follow_controls` (`height: 33.5px`, `margin: 6px 0 0 10px`, `vertical-align: baseline`).
+  - Полностью удалены инородные эмодзи Windows (`🟢`, `📋`, `⚙️`, `❌`, `🔴`, `🔙`).
+  - Статус подписки переведен на нативную капсулу Steam (`background: rgba(0, 0, 0, 0.8)`, `border-radius: 4px`, `height: 33.5px`) с оригинальной пиктограммой `ico_selected_green.png` и подсветкой даты `#a4d007`.
+  - Кнопки переведены на официальные двухуровневые компоненты Steam (`btnv6_blue_hoverfade btn_medium` и `btnv6_white_transparent btn_medium`) с нативным текстом `Список (X/100)`, анимацией `hoverfade` и правильными тенями `text-shadow`.
+  - Кнопка шестеренки переведена на векторную SVG-иконку настроек Steam.
+  - Очищены от эмодзи и адаптированы под нативный стиль модальное окно ревизии и сервисная панель на `/mycurators`.
+
 ## [2.5.0] - 2026-10-21
 
 ### Added

@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Steam Curator Follow Tracker
 // @namespace    https://github.com/BasimovIF-AI/userscript-steam-curator
-// @version      2.5.0
-// @description  Отслеживание подписок/отписок Steam (/curator/*, /developer/*, /publisher/*, /franchise/*), лимит (X/100), бесшовный UI, автообновление дат, ревизия и портал настроек
+// @version      2.6.0
+// @description  Нативный UI трекера кураторов Steam (без эмодзи, точный лимит X/100, автообновление дат, поддержка /developer/ и /publisher/)
 // @author       Senior Software Engineer
 // @match        *://store.steampowered.com/curator/*
 // @match        *://store.steampowered.com/curators/mycurators*
@@ -407,126 +407,132 @@
     function injectStyles() {
         if (document.getElementById(STYLES_ID)) return;
         const css = `
-            /* Бесшовный контейнер виджета в строке кнопок Steam */
+            /* Бесшовный контейнер виджета в строке кнопок Steam (100% сопряжение с .follow_controls) */
             #${WIDGET_ID} {
                 display: inline-flex;
                 align-items: center;
                 gap: 6px;
-                margin-left: 10px;
-                vertical-align: middle;
-                height: 31px;
+                margin: 6px 0 0 10px;
+                height: 33.5px;
+                vertical-align: baseline;
+                font-family: "Motiva Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                font-size: 12px;
+                font-weight: 300;
+                box-sizing: border-box;
                 background: transparent;
                 border: none;
                 box-shadow: none;
                 padding: 0;
-                font-family: "Motiva Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             }
 
-            .sct-badge-steam {
-                height: 30px;
-                box-sizing: border-box;
+            /* Нативная капсула статуса и даты подписки (стилизована под капсулу Steam) */
+            .sct-status-capsule {
                 display: inline-flex;
                 align-items: center;
-                gap: 6px;
+                background: rgba(0, 0, 0, 0.8);
+                border-radius: 4px;
+                height: 33.5px;
                 padding: 0 10px;
-                border-radius: 2px;
-                font-size: 11px;
-                font-weight: 500;
-                white-space: nowrap;
+                box-sizing: border-box;
                 font-family: "Motiva Sans", sans-serif;
-            }
-            .sct-badge-followed {
-                background: rgba(46, 204, 113, 0.12);
-                color: #a4d007;
-                border: 1px solid rgba(164, 208, 7, 0.35);
-            }
-            .sct-badge-legacy {
-                background: rgba(102, 192, 244, 0.12);
-                color: #66c0f4;
-                border: 1px solid rgba(102, 192, 244, 0.35);
-            }
-            .sct-badge-unfollowed {
-                background: rgba(231, 76, 60, 0.12);
-                color: #ff6b6b;
-                border: 1px solid rgba(231, 76, 60, 0.35);
-            }
-            .sct-badge-new {
-                background: rgba(243, 156, 18, 0.12);
-                color: #f39c12;
-                border: 1px solid rgba(243, 156, 18, 0.35);
-            }
-
-            /* Нативная синяя кнопка Steam (Список кураторов) */
-            .sct-btn-steam-blue {
-                height: 30px;
-                line-height: 28px;
-                padding: 0 12px;
-                border-radius: 2px;
                 font-size: 12px;
-                font-weight: 600;
-                font-family: "Motiva Sans", sans-serif;
-                background: linear-gradient(to bottom, #2d5a88 5%, #1b3858 95%);
-                border: 1px solid #3d6c8d;
-                color: #67c1f5;
-                cursor: pointer;
-                text-decoration: none;
-                box-sizing: border-box;
-                display: inline-flex;
-                align-items: center;
-                gap: 6px;
-                transition: all 0.15s ease;
+                font-weight: 300;
+                color: #c6d4df;
+                white-space: nowrap;
+                vertical-align: middle;
+                text-shadow: 1px 1px 0px rgba(0, 0, 0, 0.3);
             }
-            .sct-btn-steam-blue:hover {
-                background: linear-gradient(to bottom, #3b74ae 5%, #22476f 95%);
-                border-color: #67c1f5;
-                color: #ffffff;
+            .sct-status-capsule .sct-ico-check {
+                width: 14px;
+                height: 14px;
+                margin-right: 6px;
+                vertical-align: middle;
+                display: inline-block;
+            }
+            .sct-status-capsule .sct-date-highlight {
+                color: #a4d007;
+                font-weight: 500;
+                margin-left: 3px;
+            }
+            .sct-status-capsule.sct-unfollowed {
+                color: #8f98a0;
+            }
+            .sct-status-capsule.sct-unfollowed .sct-date-highlight {
+                color: #ff6b6b;
+            }
+            .sct-status-capsule.sct-new-curator {
+                color: #f39c12;
             }
 
-            /* Нативная серая кнопка Steam (Шестеренка) */
-            .sct-btn-steam-grey {
-                height: 30px;
-                width: 30px;
-                min-width: 30px;
+            /* Нативные кнопки Steam (btnv6_blue_hoverfade и btnv6_white_transparent) */
+            .btnv6_blue_hoverfade.btn_medium,
+            .btnv6_white_transparent.btn_medium {
+                display: inline-block;
+                border-radius: 2px;
+                padding: 1px;
+                cursor: pointer;
+                text-decoration: none !important;
                 box-sizing: border-box;
+                font-family: "Motiva Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                vertical-align: middle;
+                user-select: none;
+            }
+            .btnv6_blue_hoverfade.btn_medium > span,
+            .btnv6_white_transparent.btn_medium > span {
+                padding: 0 12px;
+                font-size: 12px;
+                font-weight: 300;
+                line-height: 29.5px;
+                height: 29.5px;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
                 border-radius: 2px;
-                background: linear-gradient(to bottom, #3a4453 5%, #232a34 95%);
-                border: 1px solid #455569;
-                color: #a4b4c4;
-                cursor: pointer;
-                font-size: 14px;
-                transition: all 0.15s ease;
-            }
-            .sct-btn-steam-grey:hover {
-                background: linear-gradient(to bottom, #4a5669 5%, #2d3642 95%);
-                border-color: #67c1f5;
-                color: #ffffff;
-            }
-
-            /* Кнопка отмены автообновления даты */
-            .sct-btn-undo {
-                height: 30px;
-                line-height: 28px;
-                padding: 0 8px;
-                border-radius: 2px;
-                background: rgba(231, 76, 60, 0.15);
-                border: 1px solid rgba(231, 76, 60, 0.4);
-                color: #ff8888;
-                font-size: 11px;
-                font-weight: 600;
-                cursor: pointer;
                 box-sizing: border-box;
-                display: inline-flex;
-                align-items: center;
-                gap: 4px;
+                text-shadow: 1px 1px 0px rgba(0, 0, 0, 0.3);
                 transition: all 0.15s ease;
+                white-space: nowrap;
             }
-            .sct-btn-undo:hover {
-                background: rgba(231, 76, 60, 0.35);
+            /* Синяя кнопка (hoverfade) */
+            .btnv6_blue_hoverfade {
+                background: rgba(103, 193, 245, 0.2);
+            }
+            .btnv6_blue_hoverfade:hover {
+                background: rgba(103, 193, 245, 0.4);
+            }
+            .btnv6_blue_hoverfade > span {
+                color: #67c1f5;
+                background: rgba(0, 0, 0, 0.25);
+            }
+            .btnv6_blue_hoverfade:hover > span {
                 color: #ffffff;
-                border-color: #ff6b6b;
+                background: rgba(103, 193, 245, 0.25);
+            }
+            /* Прозрачная/серая кнопка */
+            .btnv6_white_transparent {
+                background: rgba(255, 255, 255, 0.1);
+            }
+            .btnv6_white_transparent:hover {
+                background: rgba(255, 255, 255, 0.2);
+            }
+            .btnv6_white_transparent > span {
+                color: #c6d4df;
+                background: rgba(0, 0, 0, 0.3);
+            }
+            .btnv6_white_transparent:hover > span {
+                color: #ffffff;
+                background: rgba(255, 255, 255, 0.1);
+            }
+            /* Кнопка шестеренки */
+            .sct-btn-gear > span {
+                padding: 0 8px !important;
+            }
+            .sct-svg-icon {
+                width: 14px;
+                height: 14px;
+                fill: currentColor;
+                display: inline-block;
+                vertical-align: middle;
             }
 
             /* Выпадающее меню-портал (поверх всех слоев Steam) */
@@ -801,10 +807,10 @@
                 <span>Автообновление даты при переходе</span>
             </label>
             <div class="sct-menu-divider"></div>
-            <button class="sct-menu-item" id="sct-portal-export">💾 Экспорт базы (JSON)</button>
-            <button class="sct-menu-item" id="sct-portal-import">📥 Импорт базы (JSON)</button>
+            <button class="sct-menu-item" id="sct-portal-export">Экспорт базы (JSON)</button>
+            <button class="sct-menu-item" id="sct-portal-import">Импорт базы (JSON)</button>
             <div class="sct-menu-divider"></div>
-            <button class="sct-menu-item" id="sct-portal-rescan">🚀 Перейти к кураторам (/mycurators)</button>
+            <button class="sct-menu-item" id="sct-portal-rescan">Перейти к кураторам (/mycurators)</button>
         `;
 
         document.body.appendChild(menu);
@@ -860,7 +866,7 @@
         modal.innerHTML = `
             <div class="sct-modal-card">
                 <div class="sct-modal-header">
-                    <h3 id="sct-modal-title">📋 Ревизия кураторов: ${escapeHtml(db.user)}</h3>
+                    <h3 id="sct-modal-title">Ревизия кураторов: ${escapeHtml(db.user)}</h3>
                     <button class="sct-close-btn" id="sct-viewer-close" title="Закрыть">&times;</button>
                 </div>
                 <div class="sct-modal-toolbar">
@@ -870,8 +876,8 @@
                             <span>Только активные подписки</span>
                         </label>
                         <select class="sct-select-sort" id="sct-select-sort">
-                            <option value="oldest">⏳ Сначала старые (для отписки)</option>
-                            <option value="newest">⏱️ Сначала новые</option>
+                            <option value="oldest">Сначала старые (для отписки)</option>
+                            <option value="newest">Сначала новые</option>
                         </select>
                     </div>
                     <div style="display:flex; align-items:center; gap:10px;">
@@ -906,7 +912,7 @@
         function updateList() {
             const currentDb = loadDatabase(userInfo.steamId, userInfo.userName);
             const activeCount = getActiveFollowedCount(currentDb.curators);
-            titleEl.innerText = `📋 Ревизия кураторов: ${currentDb.user} (${activeCount}/100)`;
+            titleEl.innerText = `Ревизия кураторов: ${currentDb.user} (${activeCount}/100)`;
 
             const order = sortSelect.value;
             const onlyActive = activeOnlyToggle.checked;
@@ -932,10 +938,10 @@
 
                 let actionHtml = '';
                 if (isFollowed) {
-                    actionHtml = `<button class="sct-btn-unfollow" data-clanid="${c.clanId}">❌ Отписаться</button>`;
+                    actionHtml = `<span class="btnv6_white_transparent btn_medium sct-btn-unfollow" data-clanid="${c.clanId}" role="button"><span>Отписаться</span></span>`;
                 } else {
                     const unfollowDate = c.unfollowedAt ? formatDate(c.unfollowedAt, true) : '';
-                    actionHtml = `<span class="sct-badge-steam sct-badge-unfollowed">🔴 Отписан ${unfollowDate}</span>`;
+                    actionHtml = `<span style="color:#8f98a0; font-size:11px;">Отписан ${unfollowDate}</span>`;
                 }
 
                 // Добавляем маркер ссылки #sct_ref=list, чтобы при переходе не обновлялась дата подписки
@@ -992,7 +998,7 @@
 
             const actionCell = rowEl?.querySelector('.sct-col-action');
             if (actionCell) {
-                actionCell.innerHTML = '<span class="sct-badge-steam sct-badge-unfollowed">🔴 Отписан</span>';
+                actionCell.innerHTML = '<span style="color:#8f98a0; font-size:11px;">Отписан</span>';
             }
 
             if (activeOnlyToggle.checked && rowEl) {
@@ -1080,22 +1086,44 @@
             if (record?.followedAt) {
                 const dateText = formatDate(record.followedAt);
                 const tag = record.isInitial ? ' <small style="opacity:0.85;">(создание БД)</small>' : '';
-                const autoTag = record.isAutoUpdated ? ' <small style="opacity:0.85; color:#66c0f4;">(обновлено)</small>' : '';
-                badgeHtml = `<span class="sct-badge-steam sct-badge-followed">🟢 Подписан: <b>${dateText}</b>${tag}${autoTag}</span>`;
+                const autoTag = record.isAutoUpdated ? ' <small style="opacity:0.85; color:#67c1f5;">(обновлено)</small>' : '';
+                badgeHtml = `
+                    <div class="sct-status-capsule">
+                        <img src="https://store.fastly.steamstatic.com/public/images/v6/ico/ico_selected_green.png" class="sct-ico-check" alt="checked">
+                        <span>Подписан: <b class="sct-date-highlight">${dateText}</b>${tag}${autoTag}</span>
+                    </div>
+                `;
 
                 if (record.isAutoUpdated && record._prevFollowedAt) {
                     const prevDateText = formatDate(record._prevFollowedAt);
-                    undoBtnHtml = `<button class="sct-btn-undo" id="sct-btn-undo-date" title="Вернуть прежнюю дату: ${prevDateText}">↩️ Отменить</button>`;
+                    undoBtnHtml = `
+                        <span class="btnv6_white_transparent btn_medium sct-btn-undo" id="sct-btn-undo-date" role="button" title="Вернуть прежнюю дату: ${prevDateText}">
+                            <span>Отменить</span>
+                        </span>
+                    `;
                 }
             } else {
-                badgeHtml = `<span class="sct-badge-steam sct-badge-legacy">🟢 Подписан: <b>Дата неизвестна</b></span>`;
+                badgeHtml = `
+                    <div class="sct-status-capsule">
+                        <img src="https://store.fastly.steamstatic.com/public/images/v6/ico/ico_selected_green.png" class="sct-ico-check" alt="checked">
+                        <span>Подписан: <b class="sct-date-highlight">Дата неизвестна</b></span>
+                    </div>
+                `;
             }
         } else {
             if (record?.unfollowedAt) {
                 const dateText = formatDate(record.unfollowedAt);
-                badgeHtml = `<span class="sct-badge-steam sct-badge-unfollowed">🔴 Отписан: <b>${dateText}</b></span>`;
+                badgeHtml = `
+                    <div class="sct-status-capsule sct-unfollowed">
+                        <span>Отписан: <b class="sct-date-highlight">${dateText}</b></span>
+                    </div>
+                `;
             } else {
-                badgeHtml = `<span class="sct-badge-steam sct-badge-new">⚪ Новый куратор</span>`;
+                badgeHtml = `
+                    <div class="sct-status-capsule sct-new-curator">
+                        <span>Новый куратор</span>
+                    </div>
+                `;
             }
         }
 
@@ -1123,8 +1151,8 @@
         let newUserButton = '';
         if (!userHasDb && userInfo.steamId !== 'anonymous') {
             newUserButton = `
-                <a href="https://store.steampowered.com/curators/mycurators/?sct_init=1" class="sct-btn-steam-blue" style="border-color:#f39c12; color:#f39c12;" title="База не создана. Нажмите для первичного обхода подписок">
-                    ⚠️ Создать базу
+                <a href="https://store.steampowered.com/curators/mycurators/?sct_init=1" class="btnv6_blue_hoverfade btn_medium" title="База не создана. Нажмите для первичного обхода подписок">
+                    <span>Создать базу</span>
                 </a>
             `;
         }
@@ -1135,10 +1163,12 @@
             ${newUserButton}
             ${badgeHtml}
             ${undoBtnHtml}
-            <button class="sct-btn-steam-blue" id="sct-btn-view-list" title="Просмотр и отписка от кураторов">
-                📋 Список (${activeCount}/100)
-            </button>
-            <button class="sct-btn-steam-grey" id="sct-btn-gear" title="Настройки, экспорт и импорт базы">⚙️</button>
+            <span class="btnv6_blue_hoverfade btn_medium" id="sct-btn-view-list" role="button" title="Просмотр и отписка от кураторов">
+                <span>Список (${activeCount}/100)</span>
+            </span>
+            <span class="btnv6_blue_hoverfade btn_medium sct-btn-gear" id="sct-btn-gear" role="button" title="Настройки, экспорт и импорт базы">
+                <span><svg class="sct-svg-icon" viewBox="0 0 16 16"><path d="M9.1 4.4L8.6 2H7.4l-.5 2.4-.7.3-2-1.3-.9.8 1.3 2-.2.7-2.5.5v1.2l2.5.5.3.8-1.3 2 .8.8 2-1.3.8.3.4 2.5h1.2l.5-2.5.7-.3 2 1.3.8-.8-1.3-2 .3-.7 2.4-.5V8.6l-2.4-.5-.3-.7 1.3-2-.8-.8-2 1.3-.7-.3zM8 10.5c-1.4 0-2.5-1.1-2.5-2.5s1.1-2.5 2.5-2.5 2.5 1.1 2.5 2.5-1.1 2.5-2.5 2.5z"/></svg></span>
+            </span>
         `;
 
         // Обработчик кнопки списка
@@ -1284,36 +1314,38 @@
         if (userHasDb) {
             statusText = `
                 <div style="font-size:11px; color:#899bb0; line-height:1.4; margin-bottom:12px;">
-                    👤 Пользователь: <b>${escapeHtml(db.user)}</b><br>
-                    ⭐ Подписок: <b style="color:#67c1f5;">${activeCount} / 100</b> (всего в базе: ${total})<br>
-                    📅 Дата создания БД: <b>${formatDate(db.createdAt)}</b>
+                    Пользователь: <b>${escapeHtml(db.user)}</b><br>
+                    Подписок: <b style="color:#67c1f5;">${activeCount} / 100</b> (всего в базе: ${total})<br>
+                    Дата создания БД: <b>${formatDate(db.createdAt)}</b>
                 </div>
             `;
         } else {
             statusText = `
                 <div style="font-size:11px; color:#f39c12; line-height:1.4; margin-bottom:12px;">
-                    ⚠️ <b>Новый пользователь!</b> База кураторов еще не заведена.<br>
-                    Нажмите кнопку ниже, чтобы автоматически собрать подписки и завести базу.
+                    <b>Новый пользователь.</b> База кураторов еще не заведена.<br>
+                    Нажмите кнопку ниже для автоматического сбора подписок.
                 </div>
-                <button class="sct-btn-steam-blue" id="sct-btn-init-scan" style="width:100%; justify-content:center; margin-bottom:8px;">
-                    🚀 Начать первичный обход кураторки
-                </button>
+                <span class="btnv6_blue_hoverfade btn_medium" id="sct-btn-init-scan" role="button" style="width:100%; margin-bottom:8px;">
+                    <span style="justify-content:center;">Начать первичный обход кураторки</span>
+                </span>
             `;
         }
 
         panel.innerHTML = `
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-                <h4 style="margin:0; font-size:14px; color:#66c0f4;">🛡️ Трекер кураторов Steam</h4>
-                <button class="sct-btn-steam-grey" id="sct-panel-gear" title="Настройки и база">⚙️</button>
+                <h4 style="margin:0; font-size:14px; color:#66c0f4;">Трекер кураторов Steam</h4>
+                <span class="btnv6_blue_hoverfade btn_medium sct-btn-gear" id="sct-panel-gear" role="button" title="Настройки и база">
+                    <span><svg class="sct-svg-icon" viewBox="0 0 16 16"><path d="M9.1 4.4L8.6 2H7.4l-.5 2.4-.7.3-2-1.3-.9.8 1.3 2-.2.7-2.5.5v1.2l2.5.5.3.8-1.3 2 .8.8 2-1.3.8.3.4 2.5h1.2l.5-2.5.7-.3 2 1.3.8-.8-1.3-2 .3-.7 2.4-.5V8.6l-2.4-.5-.3-.7 1.3-2-.8-.8-2 1.3-.7-.3zM8 10.5c-1.4 0-2.5-1.1-2.5-2.5s1.1-2.5 2.5-2.5 2.5 1.1 2.5 2.5-1.1 2.5-2.5 2.5z"/></svg></span>
+                </span>
             </div>
             ${statusText}
             <div style="display:flex; gap:6px;">
-                <button class="sct-btn-steam-blue" id="sct-btn-panel-view" style="flex:1; justify-content:center;">
-                    📋 Список (${activeCount}/100)
-                </button>
-                <button class="sct-btn-steam-grey" id="sct-btn-go-back" title="Назад" style="width:auto; padding:0 10px;">
-                    🔙
-                </button>
+                <span class="btnv6_blue_hoverfade btn_medium" id="sct-btn-panel-view" role="button" style="flex:1;">
+                    <span style="justify-content:center;">Список (${activeCount}/100)</span>
+                </span>
+                <span class="btnv6_white_transparent btn_medium" id="sct-btn-go-back" role="button" title="Назад">
+                    <span>Назад</span>
+                </span>
             </div>
         `;
 
