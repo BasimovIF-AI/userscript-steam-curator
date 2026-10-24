@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Steam Curator Follow Tracker
 // @namespace    https://github.com/BasimovIF-AI/userscript-steam-curator
-// @version      2.6.0
+// @version      2.6.1
 // @description  Нативный UI трекера кураторов Steam (без эмодзи, точный лимит X/100, автообновление дат, поддержка /developer/ и /publisher/)
 // @author       Senior Software Engineer
 // @match        *://store.steampowered.com/curator/*
@@ -17,6 +17,7 @@
 (function() {
     'use strict';
 
+    const SCRIPT_VERSION = '2.6.1';
     const WIDGET_ID = 'steam-curator-tracker-panel';
     const MYCURATORS_PANEL_ID = 'steam-curator-tracker-mycurators-panel';
     const MODAL_VIEWER_ID = 'steam-curator-viewer-modal';
@@ -600,6 +601,21 @@
                 background: #233344;
                 margin: 4px 0;
             }
+            .sct-menu-footer {
+                padding: 6px 14px 4px 14px;
+                font-size: 10px;
+                color: #55677d;
+                text-align: right;
+                letter-spacing: 0.3px;
+                user-select: none;
+            }
+            .sct-version-tag {
+                font-size: 10px;
+                color: #55677d;
+                font-weight: 300;
+                margin-left: 6px;
+                user-select: none;
+            }
 
             /* Панель на странице /curators/mycurators */
             #${MYCURATORS_PANEL_ID} {
@@ -811,6 +827,8 @@
             <button class="sct-menu-item" id="sct-portal-import">Импорт базы (JSON)</button>
             <div class="sct-menu-divider"></div>
             <button class="sct-menu-item" id="sct-portal-rescan">Перейти к кураторам (/mycurators)</button>
+            <div class="sct-menu-divider"></div>
+            <div class="sct-menu-footer">Steam Curator Tracker v${SCRIPT_VERSION}</div>
         `;
 
         document.body.appendChild(menu);
@@ -866,7 +884,7 @@
         modal.innerHTML = `
             <div class="sct-modal-card">
                 <div class="sct-modal-header">
-                    <h3 id="sct-modal-title">Ревизия кураторов: ${escapeHtml(db.user)}</h3>
+                    <h3 id="sct-modal-title">Ревизия кураторов: ${escapeHtml(db.user)} <span class="sct-version-tag">v${SCRIPT_VERSION}</span></h3>
                     <button class="sct-close-btn" id="sct-viewer-close" title="Закрыть">&times;</button>
                 </div>
                 <div class="sct-modal-toolbar">
@@ -912,7 +930,7 @@
         function updateList() {
             const currentDb = loadDatabase(userInfo.steamId, userInfo.userName);
             const activeCount = getActiveFollowedCount(currentDb.curators);
-            titleEl.innerText = `Ревизия кураторов: ${currentDb.user} (${activeCount}/100)`;
+            titleEl.innerHTML = `Ревизия кураторов: ${escapeHtml(currentDb.user)} (${activeCount}/100) <span class="sct-version-tag">v${SCRIPT_VERSION}</span>`;
 
             const order = sortSelect.value;
             const onlyActive = activeOnlyToggle.checked;
@@ -1333,7 +1351,7 @@
 
         panel.innerHTML = `
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-                <h4 style="margin:0; font-size:14px; color:#66c0f4;">Трекер кураторов Steam</h4>
+                <h4 style="margin:0; font-size:14px; color:#66c0f4;">Трекер кураторов Steam <span class="sct-version-tag">v${SCRIPT_VERSION}</span></h4>
                 <span class="btnv6_blue_hoverfade btn_medium sct-btn-gear" id="sct-panel-gear" role="button" title="Настройки и база">
                     <span><svg class="sct-svg-icon" viewBox="0 0 16 16"><path d="M9.1 4.4L8.6 2H7.4l-.5 2.4-.7.3-2-1.3-.9.8 1.3 2-.2.7-2.5.5v1.2l2.5.5.3.8-1.3 2 .8.8 2-1.3.8.3.4 2.5h1.2l.5-2.5.7-.3 2 1.3.8-.8-1.3-2 .3-.7 2.4-.5V8.6l-2.4-.5-.3-.7 1.3-2-.8-.8-2 1.3-.7-.3zM8 10.5c-1.4 0-2.5-1.1-2.5-2.5s1.1-2.5 2.5-2.5 2.5 1.1 2.5 2.5-1.1 2.5-2.5 2.5z"/></svg></span>
                 </span>

@@ -179,4 +179,20 @@ assert.strictEqual(isCuratorOrCreatorPage('/franchise/tomb-raider/'), true, "/fr
 assert.strictEqual(isCuratorOrCreatorPage('/app/1091500/'), false, "Страницы игр /app/ не должны триггерить трекер");
 assert.strictEqual(isCuratorOrCreatorPage('/curators/mycurators'), false, "Страница /mycurators обрабатывается отдельной панелью");
 
-console.log('✅ Все тесты трекера (включая лимит X/100, автообновление, отмену и маршруты Creator Homes) успешно пройдены!');
+// -----------------------------------------------------------------------------
+// Тест 7: Проверка константы версии SCRIPT_VERSION и SemVer
+// -----------------------------------------------------------------------------
+console.log('Тест 7: Проверка константы версии SCRIPT_VERSION и SemVer...');
+const fs = require('fs');
+const trackerSource = fs.readFileSync('steam-curator-tracker.user.js', 'utf-8');
+const versionMatch = trackerSource.match(/const SCRIPT_VERSION = ['"]([^'"]+)['"]/);
+assert.ok(versionMatch, 'В коде трекера должна присутствовать константа SCRIPT_VERSION');
+const currentVersion = versionMatch[1];
+assert.match(currentVersion, /^\d+\.\d+\.\d+$/, 'Версия должна соответствовать SemVer (X.Y.Z)');
+assert.strictEqual(currentVersion, '2.6.1', 'Версия в константе должна быть 2.6.1');
+
+const headerVersionMatch = trackerSource.match(/\/\/\s*@version\s+([^\r\n]+)/);
+assert.ok(headerVersionMatch, 'В метаданных userscript должна быть директива @version');
+assert.strictEqual(headerVersionMatch[1].trim(), currentVersion, 'Версия в @version должна совпадать с константой SCRIPT_VERSION');
+
+console.log('✅ Все тесты трекера (включая лимит X/100, автообновление, отмену, Creator Homes и SemVer) успешно пройдены!');
