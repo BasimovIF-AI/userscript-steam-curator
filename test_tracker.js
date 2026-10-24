@@ -194,7 +194,7 @@ const versionMatch = trackerSource.match(/const SCRIPT_VERSION = ['"]([^'"]+)['"
 assert.ok(versionMatch, 'В коде трекера должна присутствовать константа SCRIPT_VERSION');
 const currentVersion = versionMatch[1];
 assert.match(currentVersion, /^\d+\.\d+\.\d+$/, 'Версия должна соответствовать SemVer (X.Y.Z)');
-assert.strictEqual(currentVersion, '2.7.0', 'Версия в константе должна быть 2.7.0');
+assert.strictEqual(currentVersion, '2.7.1', 'Версия в константе должна быть 2.7.1');
 
 const headerVersionMatch = trackerSource.match(/\/\/\s*@version\s+([^\r\n]+)/);
 assert.ok(headerVersionMatch, 'В метаданных userscript должна быть директива @version');

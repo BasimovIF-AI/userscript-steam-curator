@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Steam Curator Follow Tracker
 // @namespace    https://github.com/BasimovIF-AI/userscript-steam-curator
-// @version      2.7.0
+// @version      2.7.1
 // @description  Нативный UI трекера кураторов Steam (без эмодзи, точный лимит X/100, автообновление дат, поддержка /developer/ и /publisher/, мгновенная отписка и подписка в модалке)
 // @author       Senior Software Engineer
 // @match        *://store.steampowered.com/curator/*
@@ -17,7 +17,7 @@
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = '2.7.0';
+    const SCRIPT_VERSION = '2.7.1';
     const WIDGET_ID = 'steam-curator-tracker-panel';
     const MYCURATORS_PANEL_ID = 'steam-curator-tracker-mycurators-panel';
     const MODAL_VIEWER_ID = 'steam-curator-viewer-modal';
@@ -414,8 +414,8 @@
                 align-items: center;
                 gap: 6px;
                 margin: 6px 0 0 10px;
-                height: 33.5px;
-                vertical-align: baseline;
+                height: 34px;
+                vertical-align: top;
                 font-family: "Motiva Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                 font-size: 12px;
                 font-weight: 300;
@@ -432,7 +432,7 @@
                 align-items: center;
                 background: rgba(0, 0, 0, 0.8);
                 border-radius: 4px;
-                height: 33.5px;
+                height: 34px;
                 padding: 0 10px;
                 box-sizing: border-box;
                 font-family: "Motiva Sans", sans-serif;
@@ -440,7 +440,7 @@
                 font-weight: 300;
                 color: #c6d4df;
                 white-space: nowrap;
-                vertical-align: baseline;
+                vertical-align: top;
                 text-shadow: 1px 1px 0px rgba(0, 0, 0, 0.3);
             }
             .sct-status-capsule .sct-ico-check {
@@ -471,12 +471,12 @@
                 display: inline-block;
                 border-radius: 2px;
                 padding: 1px;
-                height: 33.5px;
+                height: 34px;
                 cursor: pointer;
                 text-decoration: none !important;
                 box-sizing: border-box;
                 font-family: "Motiva Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                vertical-align: baseline;
+                vertical-align: top;
                 user-select: none;
             }
             .btnv6_blue_hoverfade.btn_medium > span,
@@ -484,8 +484,8 @@
                 padding: 0 12px;
                 font-size: 12px;
                 font-weight: 300;
-                line-height: 31.5px;
-                height: 31.5px;
+                line-height: 32px;
+                height: 32px;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;

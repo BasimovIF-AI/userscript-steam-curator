@@ -6,9 +6,9 @@
 
 ## Возможности
 
-1. **Неотличимый нативный дизайн Steam (Pixel-Perfect Steam UI — Новинка v2.7.0):**
-   - Виджет органично встроен в строку элементов управления Steam рядом с кнопкой «В подписках» (`height: 33.5px`, `margin: 6px 0 0 10px`, `vertical-align: baseline`).
-   - Идеальное совпадение нижней и верхней границ кнопок с нативной плашкой Steam `.follow_controls` пиксель-в-пиксель (`height: 33.5px`, внутренний `span` `height: 31.5px; line-height: 31.5px;`).
+1. **Неотличимый нативный дизайн Steam (Pixel-Perfect Steam UI — Новинка v2.7.1):**
+   - Виджет органично встроен в строку элементов управления Steam рядом с кнопкой «В подписках» (`height: 34px`, `margin: 6px 0 0 10px`, `vertical-align: top`).
+   - Идеальное совпадение нижней и верхней границ кнопок с нативной плашкой Steam `.follow_controls` пиксель-в-пиксель (`height: 34px`, внутренний `span` `height: 32px; line-height: 32px;`).
    - Использование официальных стилей и классов кнопок Steam (`btnv6_blue_hoverfade btn_medium`, `btnv6_white_transparent btn_medium`), оригинальной пиктограммы `ico_selected_green.png` и векторной SVG-шестеренки.
    - Полное отсутствие сторонних цветных эмодзи.
 2. **Поддержка страниц разработчиков и издателей (Steam Creator Homes):**
@@ -63,7 +63,7 @@
 
 ## Состав репозитория
 
-- [`steam-curator-tracker.user.js`](file:///e:/%D0%98%D0%BB%D1%8C%D0%B3%D0%B8%D0%B7/Documents/VibeCoding/TM_Scripts/userscript-steam-curator/steam-curator-tracker.user.js) — основной трекер кураторов (**v2.7.0**).
+- [`steam-curator-tracker.user.js`](file:///e:/%D0%98%D0%BB%D1%8C%D0%B3%D0%B8%D0%B7/Documents/VibeCoding/TM_Scripts/userscript-steam-curator/steam-curator-tracker.user.js) — основной трекер кураторов (**v2.7.1**).
 - [`steam-curators-sync.user.js`](file:///e:/%D0%98%D0%BB%D1%8C%D0%B3%D0%B8%D0%B7/Documents/VibeCoding/TM_Scripts/userscript-steam-curator/steam-curators-sync.user.js) — архивный скрипт экспорта и компаратора кураторов со страницы `/mycurators` (v1.0.0).
 - [`test_tracker.js`](file:///e:/%D0%98%D0%BB%D1%8C%D0%B3%D0%B8%D0%B7/Documents/VibeCoding/TM_Scripts/userscript-steam-curator/test_tracker.js) — автоматические тесты трекера и режимов сортировки.
 - [`test_comparator.js`](file:///e:/%D0%98%D0%BB%D1%8C%D0%B3%D0%B8%D0%B7/Documents/VibeCoding/TM_Scripts/userscript-steam-curator/test_comparator.js) — тесты компаратора.
