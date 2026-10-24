@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Steam Curator Follow Tracker
 // @namespace    https://github.com/BasimovIF-AI/userscript-steam-curator
-// @version      2.7.1
+// @version      2.7.2
 // @description  Нативный UI трекера кураторов Steam (без эмодзи, точный лимит X/100, автообновление дат, поддержка /developer/ и /publisher/, мгновенная отписка и подписка в модалке)
 // @author       Senior Software Engineer
 // @match        *://store.steampowered.com/curator/*
@@ -17,7 +17,7 @@
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = '2.7.1';
+    const SCRIPT_VERSION = '2.7.2';
     const WIDGET_ID = 'steam-curator-tracker-panel';
     const MYCURATORS_PANEL_ID = 'steam-curator-tracker-mycurators-panel';
     const MODAL_VIEWER_ID = 'steam-curator-viewer-modal';
@@ -494,6 +494,19 @@
                 text-shadow: 1px 1px 0px rgba(0, 0, 0, 0.3);
                 transition: all 0.15s ease;
                 white-space: nowrap;
+            }
+
+            /* Адаптивный режим под неподписанное состояние Steam (36px с рамкой 2px) */
+            #${WIDGET_ID}.sct-unfollowed-mode,
+            #${WIDGET_ID}.sct-unfollowed-mode .sct-status-capsule,
+            #${WIDGET_ID}.sct-unfollowed-mode .btnv6_blue_hoverfade.btn_medium,
+            #${WIDGET_ID}.sct-unfollowed-mode .btnv6_white_transparent.btn_medium {
+                height: 36px;
+            }
+            #${WIDGET_ID}.sct-unfollowed-mode .btnv6_blue_hoverfade.btn_medium > span,
+            #${WIDGET_ID}.sct-unfollowed-mode .btnv6_white_transparent.btn_medium > span {
+                height: 34px;
+                line-height: 34px;
             }
             /* Синяя кнопка (hoverfade) */
             .btnv6_blue_hoverfade {
@@ -1226,6 +1239,15 @@
             } else {
                 target.appendChild(widget);
             }
+        }
+
+        // Адаптивная синхронизация высоты с нативной плашкой Steam (34px в подписке / 36px до подписки)
+        const followControlsEl = document.querySelector('.follow_controls');
+        const fcHeight = followControlsEl ? followControlsEl.offsetHeight : 0;
+        if (fcHeight >= 35 || !currentlyFollowed) {
+            widget.classList.add('sct-unfollowed-mode');
+        } else {
+            widget.classList.remove('sct-unfollowed-mode');
         }
 
         let newUserButton = '';
