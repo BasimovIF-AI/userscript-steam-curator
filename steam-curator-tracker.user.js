@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Steam Curator Follow Tracker
 // @namespace    https://github.com/BasimovIF-AI/userscript-steam-curator
-// @version      2.6.1
-// @description  Нативный UI трекера кураторов Steam (без эмодзи, точный лимит X/100, автообновление дат, поддержка /developer/ и /publisher/)
+// @version      2.7.0
+// @description  Нативный UI трекера кураторов Steam (без эмодзи, точный лимит X/100, автообновление дат, поддержка /developer/ и /publisher/, мгновенная отписка и подписка в модалке)
 // @author       Senior Software Engineer
 // @match        *://store.steampowered.com/curator/*
 // @match        *://store.steampowered.com/curators/mycurators*
@@ -17,7 +17,7 @@
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = '2.6.1';
+    const SCRIPT_VERSION = '2.7.0';
     const WIDGET_ID = 'steam-curator-tracker-panel';
     const MYCURATORS_PANEL_ID = 'steam-curator-tracker-mycurators-panel';
     const MODAL_VIEWER_ID = 'steam-curator-viewer-modal';
@@ -228,8 +228,8 @@
         const db = loadDatabase(userInfo.steamId, userInfo.userName);
         const existing = db.curators[clanId] || {
             clanId,
-            name: curatorInfo.name,
-            link: curatorInfo.link,
+            name: curatorInfo?.name || `Curator ${clanId}`,
+            link: curatorInfo?.link || `https://store.steampowered.com/curator/${clanId}/`,
             status: 'unknown',
             followedAt: null,
             unfollowedAt: null,
@@ -239,7 +239,7 @@
         const now = new Date().toISOString();
         if (isFollow) {
             existing.status = 'followed';
-            existing.followedAt = now;
+            existing.followedAt = existing.followedAt || now;
             existing.unfollowedAt = null;
             existing.isInitial = false;
             existing.isAutoUpdated = false;
@@ -249,8 +249,8 @@
             existing.unfollowedAt = now;
             existing.isAutoUpdated = false;
         }
-        existing.name = curatorInfo.name || existing.name;
-        existing.link = curatorInfo.link || existing.link;
+        if (curatorInfo?.name) existing.name = curatorInfo.name;
+        if (curatorInfo?.link) existing.link = curatorInfo.link;
 
         db.curators[clanId] = existing;
         saveDatabase(db);
@@ -440,7 +440,7 @@
                 font-weight: 300;
                 color: #c6d4df;
                 white-space: nowrap;
-                vertical-align: middle;
+                vertical-align: baseline;
                 text-shadow: 1px 1px 0px rgba(0, 0, 0, 0.3);
             }
             .sct-status-capsule .sct-ico-check {
@@ -471,11 +471,12 @@
                 display: inline-block;
                 border-radius: 2px;
                 padding: 1px;
+                height: 33.5px;
                 cursor: pointer;
                 text-decoration: none !important;
                 box-sizing: border-box;
                 font-family: "Motiva Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                vertical-align: middle;
+                vertical-align: baseline;
                 user-select: none;
             }
             .btnv6_blue_hoverfade.btn_medium > span,
@@ -483,8 +484,8 @@
                 padding: 0 12px;
                 font-size: 12px;
                 font-weight: 300;
-                line-height: 29.5px;
-                height: 29.5px;
+                line-height: 31.5px;
+                height: 31.5px;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
@@ -767,20 +768,9 @@
                 text-decoration: underline;
                 color: #a4d007;
             }
-            .sct-btn-unfollow {
-                background: rgba(231, 76, 60, 0.2);
-                color: #ff6b6b;
-                border: 1px solid rgba(231, 76, 60, 0.4);
-                padding: 4px 10px;
-                border-radius: 2px;
-                cursor: pointer;
-                font-size: 11px;
-                font-weight: 600;
-                transition: background 0.15s, border-color 0.15s;
-            }
-            .sct-btn-unfollow:hover {
-                background: #e74c3c;
-                color: #fff;
+            #${MODAL_VIEWER_ID} .sct-col-action {
+                text-align: right;
+                white-space: nowrap;
             }
         `;
         const style = document.createElement('style');
@@ -927,6 +917,21 @@
         const searchInput = modal.querySelector('#sct-viewer-search');
         const counterEl = modal.querySelector('#sct-viewer-counter');
 
+        function renderActionCell(c) {
+            if (c.status === 'followed') {
+                return `<span class="btnv6_white_transparent btn_medium sct-btn-unfollow" data-clanid="${c.clanId}" role="button"><span>Отписаться</span></span>`;
+            } else {
+                const unfollowDate = c.unfollowedAt ? formatDate(c.unfollowedAt, true) : '';
+                const dateLabel = unfollowDate ? `Отписан ${unfollowDate}` : 'Отписан';
+                return `
+                    <div style="display:inline-flex; align-items:center; gap:8px;">
+                        <span style="color:#8f98a0; font-size:11px;">${dateLabel}</span>
+                        <span class="btnv6_blue_hoverfade btn_medium sct-btn-refollow" data-clanid="${c.clanId}" role="button"><span>Подписаться</span></span>
+                    </div>
+                `;
+            }
+        }
+
         function updateList() {
             const currentDb = loadDatabase(userInfo.steamId, userInfo.userName);
             const activeCount = getActiveFollowedCount(currentDb.curators);
@@ -952,16 +957,6 @@
 
             tbody.innerHTML = filtered.map(c => {
                 const dateText = c.followedAt ? formatDate(c.followedAt, true) : 'Неизвестно';
-                const isFollowed = c.status === 'followed';
-
-                let actionHtml = '';
-                if (isFollowed) {
-                    actionHtml = `<span class="btnv6_white_transparent btn_medium sct-btn-unfollow" data-clanid="${c.clanId}" role="button"><span>Отписаться</span></span>`;
-                } else {
-                    const unfollowDate = c.unfollowedAt ? formatDate(c.unfollowedAt, true) : '';
-                    actionHtml = `<span style="color:#8f98a0; font-size:11px;">Отписан ${unfollowDate}</span>`;
-                }
-
                 // Добавляем маркер ссылки #sct_ref=list, чтобы при переходе не обновлялась дата подписки
                 const safeLink = c.link ? `${c.link.split('#')[0]}#sct_ref=list` : '#';
 
@@ -976,27 +971,16 @@
                                 ${escapeHtml(c.name)} ↗
                             </a>
                         </td>
-                        <td style="text-align: right;" class="sct-col-action">
-                            ${actionHtml}
+                        <td class="sct-col-action">
+                            ${renderActionCell(c)}
                         </td>
                     </tr>
                 `;
             }).join('');
-
-            // Привязка обработчиков отписки
-            tbody.querySelectorAll('.sct-btn-unfollow').forEach(btn => {
-                btn.onclick = function() {
-                    const clanId = this.dataset.clanid;
-                    const row = document.getElementById(`sct-row-${clanId}`);
-                    handleUnfollow(clanId, row);
-                };
-            });
         }
 
         function handleUnfollow(clanId, rowEl) {
-            if (!confirm('Отписаться от этого куратора в Steam?')) return;
-
-            // Вызываем нативную функцию Steam
+            // Вызываем нативную функцию Steam без блокирующего confirm
             if (typeof unsafeWindow !== 'undefined' && typeof unsafeWindow.FollowCurator === 'function') {
                 try {
                     unsafeWindow.FollowCurator(clanId, false);
@@ -1014,26 +998,81 @@
                 saveDatabase(currentDb);
             }
 
+            // Обновляем ячейку действия в текущей строке (строка НЕ удаляется, доступна обратная кнопка)
             const actionCell = rowEl?.querySelector('.sct-col-action');
-            if (actionCell) {
-                actionCell.innerHTML = '<span style="color:#8f98a0; font-size:11px;">Отписан</span>';
+            if (actionCell && currentDb.curators[clanId]) {
+                actionCell.innerHTML = renderActionCell(currentDb.curators[clanId]);
             }
 
-            if (activeOnlyToggle.checked && rowEl) {
-                rowEl.style.transition = 'opacity 0.3s, transform 0.3s';
-                rowEl.style.opacity = '0';
-                rowEl.style.transform = 'translateX(20px)';
-                setTimeout(() => {
-                    rowEl.remove();
-                    updateList();
-                }, 300);
-            } else {
-                updateList();
-            }
+            // Мгновенно обновляем счетчики
+            const activeCount = getActiveFollowedCount(currentDb.curators);
+            titleEl.innerHTML = `Ревизия кураторов: ${escapeHtml(currentDb.user)} (${activeCount}/100) <span class="sct-version-tag">v${SCRIPT_VERSION}</span>`;
+            const displayedRows = tbody.querySelectorAll('tr').length;
+            counterEl.innerText = `Показано: ${displayedRows} из ${Object.keys(currentDb.curators).length} (активных: ${activeCount}/100)`;
 
             // Синхронизируем виджет на заднем плане (включая счетчик X/100)
             updateCuratorPageUI();
         }
+
+        function handleRefollow(clanId, rowEl) {
+            // Вызываем нативную функцию Steam для повторной подписки
+            if (typeof unsafeWindow !== 'undefined' && typeof unsafeWindow.FollowCurator === 'function') {
+                try {
+                    unsafeWindow.FollowCurator(clanId, true);
+                } catch (e) {
+                    console.warn('[CuratorTracker] Ошибка вызова FollowCurator:', e);
+                }
+            }
+
+            // Фиксируем повторную подписку в локальной базе
+            const currentDb = loadDatabase(userInfo.steamId, userInfo.userName);
+            if (currentDb.curators[clanId]) {
+                currentDb.curators[clanId].status = 'followed';
+                currentDb.curators[clanId].followedAt = new Date().toISOString();
+                currentDb.curators[clanId].unfollowedAt = null;
+                currentDb.curators[clanId].isAutoUpdated = false;
+                saveDatabase(currentDb);
+            }
+
+            // Обновляем ячейку действия в текущей строке обратно на кнопку "Отписаться"
+            const actionCell = rowEl?.querySelector('.sct-col-action');
+            if (actionCell && currentDb.curators[clanId]) {
+                actionCell.innerHTML = renderActionCell(currentDb.curators[clanId]);
+            }
+
+            // Обновляем дату в первой колонке строки
+            const dateCell = rowEl?.cells?.[0];
+            if (dateCell && currentDb.curators[clanId]?.followedAt) {
+                dateCell.innerHTML = formatDate(currentDb.curators[clanId].followedAt, true);
+            }
+
+            // Мгновенно обновляем счетчики
+            const activeCount = getActiveFollowedCount(currentDb.curators);
+            titleEl.innerHTML = `Ревизия кураторов: ${escapeHtml(currentDb.user)} (${activeCount}/100) <span class="sct-version-tag">v${SCRIPT_VERSION}</span>`;
+            const displayedRows = tbody.querySelectorAll('tr').length;
+            counterEl.innerText = `Показано: ${displayedRows} из ${Object.keys(currentDb.curators).length} (активных: ${activeCount}/100)`;
+
+            // Синхронизируем виджет на заднем плане (включая счетчик X/100)
+            updateCuratorPageUI();
+        }
+
+        // Делегированная обработка кликов в таблице
+        tbody.onclick = (e) => {
+            const unfollowBtn = e.target.closest('.sct-btn-unfollow');
+            if (unfollowBtn) {
+                const clanId = unfollowBtn.dataset.clanid;
+                const row = document.getElementById(`sct-row-${clanId}`);
+                handleUnfollow(clanId, row);
+                return;
+            }
+            const refollowBtn = e.target.closest('.sct-btn-refollow');
+            if (refollowBtn) {
+                const clanId = refollowBtn.dataset.clanid;
+                const row = document.getElementById(`sct-row-${clanId}`);
+                handleRefollow(clanId, row);
+                return;
+            }
+        };
 
         activeOnlyToggle.onchange = updateList;
         sortSelect.onchange = updateList;
@@ -1070,23 +1109,46 @@
         const settings = loadSettings(userInfo.steamId);
         const db = loadDatabase(userInfo.steamId, userInfo.userName);
         let record = db.curators[curatorInfo.clanId];
-        const currentlyFollowed = isFollowedInDOM(curatorInfo.clanId);
+        const domFollowed = isFollowedInDOM(curatorInfo.clanId);
 
-        // Синхронизация при первом заходе, если в Steam подписан, но записи еще не было
-        if (currentlyFollowed && !record) {
-            record = {
-                clanId: curatorInfo.clanId,
-                name: curatorInfo.name,
-                link: curatorInfo.link,
-                status: 'followed',
-                followedAt: db.createdAt || new Date().toISOString(),
-                unfollowedAt: null,
-                isInitial: Boolean(db.createdAt),
-                isAutoUpdated: false
-            };
-            db.curators[curatorInfo.clanId] = record;
-            saveDatabase(db);
+        // Двусторонняя реактивная синхронизация состояния подписки с DOM Steam
+        if (domFollowed) {
+            if (!record) {
+                record = {
+                    clanId: curatorInfo.clanId,
+                    name: curatorInfo.name,
+                    link: curatorInfo.link,
+                    status: 'followed',
+                    followedAt: db.createdAt || new Date().toISOString(),
+                    unfollowedAt: null,
+                    isInitial: Boolean(db.createdAt),
+                    isAutoUpdated: false
+                };
+                db.curators[curatorInfo.clanId] = record;
+                saveDatabase(db);
+            } else if (record.status !== 'followed') {
+                record.status = 'followed';
+                record.followedAt = record.followedAt || new Date().toISOString();
+                record.unfollowedAt = null;
+                record.name = curatorInfo.name || record.name;
+                record.link = curatorInfo.link || record.link;
+                db.curators[curatorInfo.clanId] = record;
+                saveDatabase(db);
+            }
+        } else if (record && record.status === 'followed') {
+            const followBtn = document.getElementById(`CuratorFollowBtn_${curatorInfo.clanId}`);
+            if (followBtn) {
+                const style = window.getComputedStyle(followBtn);
+                if (style.display !== 'none' && followBtn.offsetParent !== null) {
+                    record.status = 'unfollowed';
+                    record.unfollowedAt = record.unfollowedAt || new Date().toISOString();
+                    db.curators[curatorInfo.clanId] = record;
+                    saveDatabase(db);
+                }
+            }
         }
+
+        const currentlyFollowed = record ? (record.status === 'followed') : domFollowed;
 
         // Логика автообновления даты подписки при переходе (если разрешено настройкой и не из нашей таблицы)
         if (currentlyFollowed && record) {
@@ -1426,9 +1488,10 @@
                 const curatorInfo = getCuratorInfo();
                 const userInfo = getUserInfo();
 
+                recordFollowAction(clanId, isFollow, curatorInfo, userInfo);
                 setTimeout(() => {
-                    recordFollowAction(clanId, isFollow, curatorInfo, userInfo);
-                }, 300);
+                    updateCuratorPageUI();
+                }, 350);
             }
         }, true);
 
@@ -1439,9 +1502,10 @@
                 try {
                     const curatorInfo = getCuratorInfo();
                     const userInfo = getUserInfo();
+                    recordFollowAction(String(clanid), Boolean(bFollow), curatorInfo, userInfo);
                     setTimeout(() => {
-                        recordFollowAction(String(clanid), Boolean(bFollow), curatorInfo, userInfo);
-                    }, 300);
+                        updateCuratorPageUI();
+                    }, 350);
                 } catch (err) {
                     console.error('[CuratorTracker] Ошибка хука FollowCurator:', err);
                 }

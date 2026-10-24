@@ -125,8 +125,13 @@ activeCount = getActiveFollowedCount(database.curators);
 assert.strictEqual(activeCount, 2, "После отписки счетчик должен мгновенно уменьшиться до 2");
 assert.strictEqual(`(${activeCount}/100)`, "(2/100)", "Кнопка должна отображать (2/100)");
 
-// Возвращаем обратно для следующих тестов
+// Имитируем повторную подписку (Re-follow) из модального окна
 database.curators["20"].status = 'followed';
+database.curators["20"].followedAt = new Date().toISOString();
+database.curators["20"].unfollowedAt = null;
+activeCount = getActiveFollowedCount(database.curators);
+assert.strictEqual(activeCount, 3, "После повторной подписки счетчик должен мгновенно увеличиться до 3");
+assert.strictEqual(`(${activeCount}/100)`, "(3/100)", "Кнопка должна отображать (3/100)");
 
 // -----------------------------------------------------------------------------
 // Тест 5: Автообновление даты подписки при переходе и отмена (Undo)
@@ -189,7 +194,7 @@ const versionMatch = trackerSource.match(/const SCRIPT_VERSION = ['"]([^'"]+)['"
 assert.ok(versionMatch, 'В коде трекера должна присутствовать константа SCRIPT_VERSION');
 const currentVersion = versionMatch[1];
 assert.match(currentVersion, /^\d+\.\d+\.\d+$/, 'Версия должна соответствовать SemVer (X.Y.Z)');
-assert.strictEqual(currentVersion, '2.6.1', 'Версия в константе должна быть 2.6.1');
+assert.strictEqual(currentVersion, '2.7.0', 'Версия в константе должна быть 2.7.0');
 
 const headerVersionMatch = trackerSource.match(/\/\/\s*@version\s+([^\r\n]+)/);
 assert.ok(headerVersionMatch, 'В метаданных userscript должна быть директива @version');
