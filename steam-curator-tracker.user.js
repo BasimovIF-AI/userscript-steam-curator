@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Steam Curator Follow Tracker
 // @namespace    https://github.com/BasimovIF-AI/userscript-steam-curator
-// @version      2.7.2
-// @description  Нативный UI трекера кураторов Steam (без эмодзи, точный лимит X/100, автообновление дат, поддержка /developer/ и /publisher/, мгновенная отписка и подписка в модалке)
+// @version      2.8.0
+// @description  Steam Curator Follow Tracker - Native UI, i18n multi-language support (EN default, RU, ZH, PT, ES, DE), 100 curator limit tracking, in-modal unfollow/refollow, Creator Homes support
 // @author       Senior Software Engineer
 // @match        *://store.steampowered.com/curator/*
 // @match        *://store.steampowered.com/curators/mycurators*
@@ -17,7 +17,7 @@
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = '2.7.2';
+    const SCRIPT_VERSION = '2.8.0';
     const WIDGET_ID = 'steam-curator-tracker-panel';
     const MYCURATORS_PANEL_ID = 'steam-curator-tracker-mycurators-panel';
     const MODAL_VIEWER_ID = 'steam-curator-viewer-modal';
@@ -34,7 +34,7 @@
                 const raw = localStorage.getItem(key);
                 return raw ? JSON.parse(raw) : def;
             } catch (e) {
-                console.error('[CuratorTracker] Ошибка чтения:', e);
+                console.error('[CuratorTracker] Storage read error:', e);
                 return def;
             }
         },
@@ -46,10 +46,424 @@
                     localStorage.setItem(key, JSON.stringify(val));
                 }
             } catch (e) {
-                console.error('[CuratorTracker] Ошибка записи:', e);
+                console.error('[CuratorTracker] Storage write error:', e);
             }
         }
     };
+
+    // -------------------------------------------------------------------------
+    // Интернационализация (i18n: EN default, RU, ZH, PT, ES, DE)
+    // -------------------------------------------------------------------------
+    const I18N = {
+    en: {
+        badge_followed: "Followed: ",
+        badge_date_unknown: "Date unknown",
+        badge_unfollowed: "Unfollowed: ",
+        badge_new_curator: "New curator",
+        badge_tag_init: "(initial scan)",
+        badge_tag_updated: "(updated)",
+        btn_undo: "Undo",
+        btn_undo_title: "Restore previous date: {date}",
+        btn_list: "List ({count}/100)",
+        btn_list_title: "View and manage curators",
+        btn_gear_title: "Settings, export and import database",
+        btn_create_db: "Create database",
+        btn_create_db_title: "Database not found. Click to perform initial scan of your follows",
+        menu_header: "Settings & Database ({user})",
+        menu_autoupdate: "Auto-update date on page visit",
+        menu_autoupdate_title: "When visiting a followed curator's page, automatically update follow date to current",
+        menu_export: "Export database (JSON)",
+        menu_import: "Import database (JSON)",
+        menu_rescan: "Go to curators (/mycurators)",
+        menu_language: "Interface Language",
+        modal_title: "Curator Audit: {user} ({active}/100)",
+        modal_close: "Close",
+        modal_active_only: "Active follows only",
+        sort_oldest: "Oldest follows first (for unfollowing)",
+        sort_newest: "Newest follows first",
+        search_placeholder: "Search by name...",
+        counter_shown: "Showing: {shown} of {total} (active: {active}/100)",
+        th_date: "Follow Date",
+        th_curator: "Curator",
+        th_action: "Action",
+        btn_unfollow: "Unfollow",
+        btn_refollow: "Follow",
+        status_unfollowed_short: "Unfollowed",
+        status_unfollowed_date: "Unfollowed {date}",
+        not_found: "No curators found.",
+        date_unknown: "Unknown",
+        import_err_no_curators: "File does not contain a curators array",
+        import_success: "✅ Database successfully imported!\nUser: {user}\nActive follows: {active}/100\nTotal in database: {total}\nDatabase creation date: {date}",
+        import_error: "❌ JSON Import error: {err}",
+        scan_scrolling: "Scrolling page...",
+        scan_saving: "Saving database...",
+        scan_found: "Found: {count}",
+        scan_success: "✅ Curator database successfully saved!\nUser: {user}\nActive follows: {active}/100\nTotal in database: {total} (newly added: {added})\nDatabase creation date: {date}",
+        scan_error: "❌ Initialization error: {err}",
+        panel_user: "User:",
+        panel_follows: "Follows:",
+        panel_total: "total in database:",
+        panel_db_created: "Database created:",
+        panel_new_user: "New user. Curator database is not set up yet.\nClick below to automatically scan your follows.",
+        panel_btn_scan: "Start initial curator scan",
+        panel_title: "Steam Curator Tracker",
+        panel_btn_back: "Back"
+    },
+    ru: {
+        badge_followed: "Подписан: ",
+        badge_date_unknown: "Дата неизвестна",
+        badge_unfollowed: "Отписан: ",
+        badge_new_curator: "Новый куратор",
+        badge_tag_init: "(создание БД)",
+        badge_tag_updated: "(обновлено)",
+        btn_undo: "Отменить",
+        btn_undo_title: "Вернуть прежнюю дату: {date}",
+        btn_list: "Список ({count}/100)",
+        btn_list_title: "Просмотр и отписка от кураторов",
+        btn_gear_title: "Настройки, экспорт и импорт базы",
+        btn_create_db: "Создать базу",
+        btn_create_db_title: "База не создана. Нажмите для первичного обхода подписок",
+        menu_header: "Настройки и база ({user})",
+        menu_autoupdate: "Автообновление даты при переходе",
+        menu_autoupdate_title: "При обычном переходе на страницу подписанного куратора обновлять дату подписки на текущую",
+        menu_export: "Экспорт базы (JSON)",
+        menu_import: "Импорт базы (JSON)",
+        menu_rescan: "Перейти к кураторам (/mycurators)",
+        menu_language: "Язык интерфейса",
+        modal_title: "Ревизия кураторов: {user} ({active}/100)",
+        modal_close: "Закрыть",
+        modal_active_only: "Только активные подписки",
+        sort_oldest: "Сначала старые (для отписки)",
+        sort_newest: "Сначала новые",
+        search_placeholder: "Поиск по названию...",
+        counter_shown: "Показано: {shown} из {total} (активных: {active}/100)",
+        th_date: "Дата подписки",
+        th_curator: "Куратор",
+        th_action: "Действие",
+        btn_unfollow: "Отписаться",
+        btn_refollow: "Подписаться",
+        status_unfollowed_short: "Отписан",
+        status_unfollowed_date: "Отписан {date}",
+        not_found: "Кураторы не найдены.",
+        date_unknown: "Неизвестно",
+        import_err_no_curators: "Файл не содержит массив curators",
+        import_success: "✅ База успешно импортирована!\nПользователь: {user}\nАктивных подписок: {active}/100\nВсего в базе: {total}\nДата создания базы: {date}",
+        import_error: "❌ Ошибка импорта JSON: {err}",
+        scan_scrolling: "Скроллинг страницы...",
+        scan_saving: "Заведение базы...",
+        scan_found: "Найдено: {count}",
+        scan_success: "✅ База кураторов успешно сохранена!\nПользователь: {user}\nАктивных подписок: {active}/100\nВсего в базе: {total} (новых добавлено: {added})\nДата создания базы: {date}",
+        scan_error: "❌ Ошибка инициализации: {err}",
+        panel_user: "Пользователь:",
+        panel_follows: "Подписок:",
+        panel_total: "всего в базе:",
+        panel_db_created: "Дата создания БД:",
+        panel_new_user: "Новый пользователь. База кураторов еще не заведена.\nНажмите кнопку ниже для автоматического сбора подписок.",
+        panel_btn_scan: "Начать первичный обход кураторки",
+        panel_title: "Трекер кураторов Steam",
+        panel_btn_back: "Назад"
+    },
+    zh: {
+        badge_followed: "已关注：",
+        badge_date_unknown: "日期未知",
+        badge_unfollowed: "已取关：",
+        badge_new_curator: "新鉴赏家",
+        badge_tag_init: "(初次建库)",
+        badge_tag_updated: "(已更新)",
+        btn_undo: "撤销",
+        btn_undo_title: "恢复先前日期：{date}",
+        btn_list: "关注列表 ({count}/100)",
+        btn_list_title: "查看并管理鉴赏家",
+        btn_gear_title: "设置、导出与导入数据库",
+        btn_create_db: "创建数据库",
+        btn_create_db_title: "未找到数据库。点击执行首次关注鉴赏家扫描",
+        menu_header: "设置与数据库 ({user})",
+        menu_autoupdate: "访问页面时自动更新日期",
+        menu_autoupdate_title: "访问已关注鉴赏家页面时，自动将关注日期更新为当前时间",
+        menu_export: "导出数据库 (JSON)",
+        menu_import: "导入数据库 (JSON)",
+        menu_rescan: "前往关注鉴赏家页面 (/mycurators)",
+        menu_language: "界面语言",
+        modal_title: "鉴赏家审查：{user} ({active}/100)",
+        modal_close: "关闭",
+        modal_active_only: "仅显示活跃关注",
+        sort_oldest: "最早关注在前（便于取关）",
+        sort_newest: "最新关注在前",
+        search_placeholder: "按名称搜索...",
+        counter_shown: "显示：{shown} / {total}（活跃：{active}/100）",
+        th_date: "关注日期",
+        th_curator: "鉴赏家",
+        th_action: "操作",
+        btn_unfollow: "取关",
+        btn_refollow: "关注",
+        status_unfollowed_short: "已取关",
+        status_unfollowed_date: "已取关于 {date}",
+        not_found: "未找到鉴赏家。",
+        date_unknown: "未知",
+        import_err_no_curators: "文件中不包含 curators 数组",
+        import_success: "✅ 数据库导入成功！\n用户：{user}\n活跃关注：{active}/100\n数据库总计：{total}\n建库日期：{date}",
+        import_error: "❌ JSON 导入错误：{err}",
+        scan_scrolling: "正在滚动页面...",
+        scan_saving: "正在保存数据库...",
+        scan_found: "已找到：{count}",
+        scan_success: "✅ 鉴赏家数据库保存成功！\n用户：{user}\n活跃关注：{active}/100\n数据库总计：{total}（新增：{added}）\n建库日期：{date}",
+        scan_error: "❌ 初始化错误：{err}",
+        panel_user: "用户：",
+        panel_follows: "关注数：",
+        panel_total: "数据库总计：",
+        panel_db_created: "建库日期：",
+        panel_new_user: "新用户。鉴赏家数据库尚未建立。\n点击下方按钮自动扫描您的关注。",
+        panel_btn_scan: "开始首次关注鉴赏家扫描",
+        panel_title: "Steam 鉴赏家追踪器",
+        panel_btn_back: "返回"
+    },
+    pt: {
+        badge_followed: "Seguindo: ",
+        badge_date_unknown: "Data desconhecida",
+        badge_unfollowed: "Deixou de seguir: ",
+        badge_new_curator: "Novo curador",
+        badge_tag_init: "(banco inicial)",
+        badge_tag_updated: "(atualizado)",
+        btn_undo: "Desfazer",
+        btn_undo_title: "Restaurar data anterior: {date}",
+        btn_list: "Lista ({count}/100)",
+        btn_list_title: "Ver e gerenciar curadores",
+        btn_gear_title: "Configurações, exportar e importar banco de dados",
+        btn_create_db: "Criar banco de dados",
+        btn_create_db_title: "Banco de dados não encontrado. Clique para escanear suas inscrições",
+        menu_header: "Configurações e Banco ({user})",
+        menu_autoupdate: "Atualizar data ao visitar página",
+        menu_autoupdate_title: "Ao visitar a página de um curador já seguido, atualizar automaticamente a data",
+        menu_export: "Exportar banco de dados (JSON)",
+        menu_import: "Importar banco de dados (JSON)",
+        menu_rescan: "Ir para curadores (/mycurators)",
+        menu_language: "Idioma da interface",
+        modal_title: "Auditoria de Curadores: {user} ({active}/100)",
+        modal_close: "Fechar",
+        modal_active_only: "Apenas inscrições ativas",
+        sort_oldest: "Mais antigos primeiro (para remover)",
+        sort_newest: "Mais recentes primeiro",
+        search_placeholder: "Buscar por nome...",
+        counter_shown: "Mostrando: {shown} de {total} (ativos: {active}/100)",
+        th_date: "Data de inscrição",
+        th_curator: "Curador",
+        th_action: "Ação",
+        btn_unfollow: "Deixar de seguir",
+        btn_refollow: "Seguir",
+        status_unfollowed_short: "Removido",
+        status_unfollowed_date: "Removido em {date}",
+        not_found: "Nenhum curador encontrado.",
+        date_unknown: "Desconhecido",
+        import_err_no_curators: "O arquivo não contém uma matriz curators",
+        import_success: "✅ Banco de dados importado com sucesso!\nUsuário: {user}\nInscrições ativas: {active}/100\nTotal no banco: {total}\nData de criação: {date}",
+        import_error: "❌ Erro ao importar JSON: {err}",
+        scan_scrolling: "Rolando página...",
+        scan_saving: "Salvando banco de dados...",
+        scan_found: "Encontrados: {count}",
+        scan_success: "✅ Banco de dados salvo com sucesso!\nUsuário: {user}\nInscrições ativas: {active}/100\nTotal no banco: {total} (recém-adicionados: {added})\nData de criação: {date}",
+        scan_error: "❌ Erro de inicialização: {err}",
+        panel_user: "Usuário:",
+        panel_follows: "Inscrições:",
+        panel_total: "total no banco:",
+        panel_db_created: "Banco criado em:",
+        panel_new_user: "Novo usuário. Banco de dados de curadores ainda não configurado.\nClique abaixo para escanear suas inscrições automaticamente.",
+        panel_btn_scan: "Iniciar escaneamento inicial",
+        panel_title: "Rastreador de Curadores Steam",
+        panel_btn_back: "Voltar"
+    },
+    es: {
+        badge_followed: "Siguiendo: ",
+        badge_date_unknown: "Fecha desconocida",
+        badge_unfollowed: "Dejado de seguir: ",
+        badge_new_curator: "Nuevo curador",
+        badge_tag_init: "(creación de BD)",
+        badge_tag_updated: "(actualizado)",
+        btn_undo: "Deshacer",
+        btn_undo_title: "Restaurar fecha anterior: {date}",
+        btn_list: "Lista ({count}/100)",
+        btn_list_title: "Ver y gestionar curadores",
+        btn_gear_title: "Configuración, exportar e importar base de datos",
+        btn_create_db: "Crear base de datos",
+        btn_create_db_title: "Base de datos no encontrada. Haz clic para escanear tus seguidos",
+        menu_header: "Configuración y BD ({user})",
+        menu_autoupdate: "Actualizar fecha al visitar la página",
+        menu_autoupdate_title: "Al visitar la página de un curador seguido, actualizar automáticamente la fecha",
+        menu_export: "Exportar base de datos (JSON)",
+        menu_import: "Importar base de datos (JSON)",
+        menu_rescan: "Ir a curadores (/mycurators)",
+        menu_language: "Idioma de la interfaz",
+        modal_title: "Auditoría de Curadores: {user} ({active}/100)",
+        modal_close: "Cerrar",
+        modal_active_only: "Solo seguidos activos",
+        sort_oldest: "Más antiguos primero (para dejar de seguir)",
+        sort_newest: "Más recientes primero",
+        search_placeholder: "Buscar por nombre...",
+        counter_shown: "Mostrando: {shown} de {total} (activos: {active}/100)",
+        th_date: "Fecha de seguimiento",
+        th_curator: "Curador",
+        th_action: "Acción",
+        btn_unfollow: "Dejar de seguir",
+        btn_refollow: "Seguir",
+        status_unfollowed_short: "Dejado de seguir",
+        status_unfollowed_date: "Dejado de seguir {date}",
+        not_found: "No se encontraron curadores.",
+        date_unknown: "Desconocido",
+        import_err_no_curators: "El archivo no contiene un array curators",
+        import_success: "✅ ¡Base de datos importada con éxito!\nUsuario: {user}\nSeguidos activos: {active}/100\nTotal en BD: {total}\nFecha de creación: {date}",
+        import_error: "❌ Error al importar JSON: {err}",
+        scan_scrolling: "Desplazando página...",
+        scan_saving: "Guardando base de datos...",
+        scan_found: "Encontrados: {count}",
+        scan_success: "✅ ¡Base de datos guardada con éxito!\nUsuario: {user}\nSeguidos activos: {active}/100\nTotal en BD: {total} (nuevos añadidos: {added})\nFecha de creación: {date}",
+        scan_error: "❌ Error de inicialización: {err}",
+        panel_user: "Usuario:",
+        panel_follows: "Seguidos:",
+        panel_total: "total en BD:",
+        panel_db_created: "BD creada el:",
+        panel_new_user: "Nuevo usuario. La base de datos de curadores aún no está creada.\nHaz clic abajo para escanear tus seguidos automáticamente.",
+        panel_btn_scan: "Iniciar escaneo inicial de curadores",
+        panel_title: "Rastreador de Curadores de Steam",
+        panel_btn_back: "Volver"
+    },
+    de: {
+        badge_followed: "Gefolgt: ",
+        badge_date_unknown: "Datum unbekannt",
+        badge_unfollowed: "Entfolgt: ",
+        badge_new_curator: "Neuer Kurator",
+        badge_tag_init: "(Initialer Scan)",
+        badge_tag_updated: "(aktualisiert)",
+        btn_undo: "Rückgängig",
+        btn_undo_title: "Vorheriges Datum wiederherstellen: {date}",
+        btn_list: "Liste ({count}/100)",
+        btn_list_title: "Kuratoren anzeigen und verwalten",
+        btn_gear_title: "Einstellungen, Export und Import der Datenbank",
+        btn_create_db: "Datenbank erstellen",
+        btn_create_db_title: "Keine Datenbank gefunden. Klicken, um Ihre Abonnements zu scannen",
+        menu_header: "Einstellungen & Datenbank ({user})",
+        menu_autoupdate: "Datum bei Seitenaufruf automatisch aktualisieren",
+        menu_autoupdate_title: "Beim Besuch der Seite eines abonnierten Kurators das Datum automatisch aktualisieren",
+        menu_export: "Datenbank exportieren (JSON)",
+        menu_import: "Datenbank importieren (JSON)",
+        menu_rescan: "Zu Kuratoren gehen (/mycurators)",
+        menu_language: "Sprache",
+        modal_title: "Kuratoren-Prüfung: {user} ({active}/100)",
+        modal_close: "Schließen",
+        modal_active_only: "Nur aktive Abonnements",
+        sort_oldest: "Älteste zuerst (zum Entfolgen)",
+        sort_newest: "Neueste zuerst",
+        search_placeholder: "Nach Namen suchen...",
+        counter_shown: "Angezeigt: {shown} von {total} (aktiv: {active}/100)",
+        th_date: "Abonniert am",
+        th_curator: "Kurator",
+        th_action: "Aktion",
+        btn_unfollow: "Entfolgen",
+        btn_refollow: "Folgen",
+        status_unfollowed_short: "Entfolgt",
+        status_unfollowed_date: "Entfolgt am {date}",
+        not_found: "Keine Kuratoren gefunden.",
+        date_unknown: "Unbekannt",
+        import_err_no_curators: "Datei enthält kein curators-Array",
+        import_success: "✅ Datenbank erfolgreich importiert!\nBenutzer: {user}\nAktive Abonnements: {active}/100\nGesamt in Datenbank: {total}\nErstellungsdatum: {date}",
+        import_error: "❌ JSON-Importfehler: {err}",
+        scan_scrolling: "Scrolle Seite...",
+        scan_saving: "Speichere Datenbank...",
+        scan_found: "Gefunden: {count}",
+        scan_success: "✅ Kuratorendatenbank erfolgreich gespeichert!\nBenutzer: {user}\nAktive Abonnements: {active}/100\nGesamt in Datenbank: {total} (neu hinzugefügt: {added})\nErstellungsdatum: {date}",
+        scan_error: "❌ Initialisierungsfehler: {err}",
+        panel_user: "Benutzer:",
+        panel_follows: "Abonnements:",
+        panel_total: "Gesamt in Datenbank:",
+        panel_db_created: "Datenbank erstellt am:",
+        panel_new_user: "Neuer Benutzer. Die Kuratorendatenbank ist noch nicht eingerichtet.\nKlicken Sie unten, um Ihre Abonnements automatisch zu scannen.",
+        panel_btn_scan: "Initialen Kuratoren-Scan starten",
+        panel_title: "Steam Curator Tracker",
+        panel_btn_back: "Zurück"
+    }
+};
+
+    const LOCALE_MAP = {
+        en: 'en-US',
+        ru: 'ru-RU',
+        zh: 'zh-CN',
+        pt: 'pt-BR',
+        es: 'es-ES',
+        de: 'de-DE'
+    };
+
+    function detectLanguage() {
+        // 1. Steam global unsafeWindow.g_strLanguage
+        if (typeof unsafeWindow !== 'undefined' && unsafeWindow.g_strLanguage) {
+            const steamLang = String(unsafeWindow.g_strLanguage).toLowerCase();
+            if (steamLang === 'russian') return 'ru';
+            if (steamLang === 'schinese' || steamLang === 'tchinese') return 'zh';
+            if (steamLang === 'brazilian' || steamLang === 'portuguese') return 'pt';
+            if (steamLang === 'spanish' || steamLang === 'latam') return 'es';
+            if (steamLang === 'german') return 'de';
+            if (steamLang === 'english') return 'en';
+        }
+
+        // 2. HTML lang attribute
+        const htmlLang = (typeof document !== 'undefined' && document.documentElement?.lang) ? document.documentElement.lang.toLowerCase() : '';
+        if (htmlLang) {
+            if (htmlLang.startsWith('ru')) return 'ru';
+            if (htmlLang.startsWith('zh')) return 'zh';
+            if (htmlLang.startsWith('pt')) return 'pt';
+            if (htmlLang.startsWith('es')) return 'es';
+            if (htmlLang.startsWith('de')) return 'de';
+            if (htmlLang.startsWith('en')) return 'en';
+        }
+
+        // 3. Steam cookie Steam_Language
+        if (typeof document !== 'undefined' && document.cookie) {
+            const cookieMatch = document.cookie.match(/Steam_Language=([^;]+)/i);
+            if (cookieMatch) {
+                const cLang = cookieMatch[1].toLowerCase();
+                if (cLang === 'russian') return 'ru';
+                if (cLang === 'schinese' || cLang === 'tchinese') return 'zh';
+                if (cLang === 'brazilian' || cLang === 'portuguese') return 'pt';
+                if (cLang === 'spanish' || cLang === 'latam') return 'es';
+                if (cLang === 'german') return 'de';
+                if (cLang === 'english') return 'en';
+            }
+        }
+
+        // 4. Browser navigator.language
+        if (typeof navigator !== 'undefined') {
+            const navLang = (navigator.language || navigator.userLanguage || '').toLowerCase();
+            if (navLang.startsWith('ru')) return 'ru';
+            if (navLang.startsWith('zh')) return 'zh';
+            if (navLang.startsWith('pt')) return 'pt';
+            if (navLang.startsWith('es')) return 'es';
+            if (navLang.startsWith('de')) return 'de';
+        }
+
+        // 5. Default fallback: English
+        return 'en';
+    }
+
+    function getActiveLanguage(steamId) {
+        if (steamId) {
+            const settings = loadSettings(steamId);
+            if (settings.language && settings.language !== 'auto' && I18N[settings.language]) {
+                return settings.language;
+            }
+        }
+        return detectLanguage();
+    }
+
+    let currentActiveLanguage = 'en';
+
+    function t(key, params = {}, lang = null) {
+        const activeLang = lang || (currentActiveLanguage || detectLanguage());
+        const dict = I18N[activeLang] || I18N.en;
+        let text = dict && dict[key] !== undefined ? dict[key] : (I18N.en[key] !== undefined ? I18N.en[key] : key);
+        if (params && typeof params === 'object') {
+            for (const [k, v] of Object.entries(params)) {
+                text = text.replace(new RegExp('\\{' + k + '\\}', 'g'), v !== undefined && v !== null ? v : '');
+            }
+        }
+        return text;
+    }
 
     // -------------------------------------------------------------------------
     // Флаг перехода из собственной таблицы (для исключения автообновления даты)
@@ -130,11 +544,11 @@
         if (!name) {
             const ogTitle = document.querySelector('meta[property="og:title"]')?.getAttribute('content');
             if (ogTitle) {
-                name = ogTitle.replace(/\s*на Steam.*$/i, '').replace(/\s*on Steam.*$/i, '').trim();
+                name = ogTitle.replace(/\s*(на Steam|on Steam|在 Steam 上|no Steam|en Steam|auf Steam).*$/i, '').trim();
             }
         }
         if (!name) {
-            name = document.title ? document.title.replace(/\s*на Steam.*$/i, '').replace(/\s*on Steam.*$/i, '').trim() : 'Unknown Creator';
+            name = document.title ? document.title.replace(/\s*(на Steam|on Steam|在 Steam 上|no Steam|en Steam|auf Steam).*$/i, '').trim() : 'Unknown Creator';
         }
 
         const cleanCurrentUrl = window.location.origin + window.location.pathname;
@@ -153,17 +567,19 @@
         return style.display !== 'none' && unfollowBtn.offsetParent !== null;
     }
 
-    function formatDate(isoStr, onlyDate = false) {
+    function formatDate(isoStr, onlyDate = false, lang = null) {
         if (!isoStr) return null;
         try {
             const d = new Date(isoStr);
             if (isNaN(d.getTime())) return isoStr;
+            const activeLang = lang || (currentActiveLanguage || detectLanguage());
+            const locale = LOCALE_MAP[activeLang] || 'en-US';
             const options = { day: '2-digit', month: '2-digit', year: 'numeric' };
             if (!onlyDate) {
                 options.hour = '2-digit';
                 options.minute = '2-digit';
             }
-            return d.toLocaleString('ru-RU', options);
+            return d.toLocaleString(locale, options);
         } catch (_) {
             return isoStr;
         }
@@ -178,7 +594,7 @@
     }
 
     function loadSettings(steamId) {
-        const def = { autoUpdateOnVisit: true };
+        const def = { autoUpdateOnVisit: true, language: 'auto' };
         const raw = storage.get(getSettingsKey(steamId), null);
         return Object.assign({}, def, raw || {});
     }
@@ -359,6 +775,7 @@
     }
 
     function importCuratorsJSON(userInfo, onSuccess) {
+        currentActiveLanguage = getActiveLanguage(userInfo?.steamId);
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.json,application/json';
@@ -371,7 +788,7 @@
                 try {
                     const parsed = JSON.parse(evt.target.result);
                     if (!parsed || !Array.isArray(parsed.curators)) {
-                        throw new Error('Файл не содержит массив curators');
+                        throw new Error(t('import_err_no_curators'));
                     }
                     const steamId = parsed.steamId || userInfo.steamId;
                     const db = {
@@ -389,10 +806,15 @@
                     });
                     saveDatabase(db);
                     const activeCount = getActiveFollowedCount(db.curators);
-                    alert(`✅ База успешно импортирована!\nПользователь: ${db.user}\nАктивных подписок: ${activeCount}/100\nВсего в базе: ${Object.keys(db.curators).length}\nДата создания базы: ${formatDate(db.createdAt)}`);
+                    alert(t('import_success', {
+                        user: db.user,
+                        active: activeCount,
+                        total: Object.keys(db.curators).length,
+                        date: formatDate(db.createdAt)
+                    }));
                     onSuccess?.(db);
                 } catch (err) {
-                    alert(`❌ Ошибка импорта JSON: ${err.message}`);
+                    alert(t('import_error', { err: err.message }));
                 }
             };
             reader.readAsText(file);
@@ -630,6 +1052,28 @@
                 margin-left: 6px;
                 user-select: none;
             }
+            .sct-menu-lang-row {
+                padding: 8px 14px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                font-size: 12px;
+                color: #c6d4df;
+            }
+            .sct-menu-select {
+                background: #1b2634;
+                border: 1px solid #2a475e;
+                color: #e1e7ee;
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 11px;
+                outline: none;
+                cursor: pointer;
+            }
+            .sct-menu-select:focus {
+                border-color: #66c0f4;
+            }
 
             /* Панель на странице /curators/mycurators */
             #${MYCURATORS_PANEL_ID} {
@@ -805,12 +1249,13 @@
         injectStyles();
         const db = loadDatabase(userInfo.steamId, userInfo.userName);
         const settings = loadSettings(userInfo.steamId);
+        currentActiveLanguage = getActiveLanguage(userInfo.steamId);
 
         const menu = document.createElement('div');
         menu.id = GLOBAL_GEAR_MENU_ID;
 
         const rect = anchorBtn.getBoundingClientRect();
-        const menuWidth = 260;
+        const menuWidth = 270;
         menu.style.position = 'fixed';
         menu.style.top = `${rect.bottom + 4}px`;
         const left = Math.min(window.innerWidth - menuWidth - 10, Math.max(10, rect.right - menuWidth));
@@ -818,18 +1263,32 @@
         menu.style.zIndex = '99999999';
 
         const autoUpdateChecked = settings.autoUpdateOnVisit ? 'checked' : '';
+        const currentLang = settings.language || 'auto';
+        const detected = detectLanguage().toUpperCase();
 
         menu.innerHTML = `
-            <div class="sct-menu-header">Настройки и база (${escapeHtml(db.user || 'User')})</div>
-            <label class="sct-menu-checkbox-item" title="При обычном переходе на страницу подписанного куратора обновлять дату подписки на текущую">
+            <div class="sct-menu-header">${t('menu_header', { user: escapeHtml(db.user || 'User') })}</div>
+            <div class="sct-menu-lang-row">
+                <span>${t('menu_language')}</span>
+                <select class="sct-menu-select" id="sct-setting-language">
+                    <option value="auto"${currentLang === 'auto' ? ' selected' : ''}>Auto (${detected})</option>
+                    <option value="en"${currentLang === 'en' ? ' selected' : ''}>English</option>
+                    <option value="ru"${currentLang === 'ru' ? ' selected' : ''}>Русский</option>
+                    <option value="zh"${currentLang === 'zh' ? ' selected' : ''}>中文</option>
+                    <option value="pt"${currentLang === 'pt' ? ' selected' : ''}>Português</option>
+                    <option value="es"${currentLang === 'es' ? ' selected' : ''}>Español</option>
+                    <option value="de"${currentLang === 'de' ? ' selected' : ''}>Deutsch</option>
+                </select>
+            </div>
+            <label class="sct-menu-checkbox-item" title="${t('menu_autoupdate_title')}">
                 <input type="checkbox" id="sct-setting-autoupdate" ${autoUpdateChecked}>
-                <span>Автообновление даты при переходе</span>
+                <span>${t('menu_autoupdate')}</span>
             </label>
             <div class="sct-menu-divider"></div>
-            <button class="sct-menu-item" id="sct-portal-export">Экспорт базы (JSON)</button>
-            <button class="sct-menu-item" id="sct-portal-import">Импорт базы (JSON)</button>
+            <button class="sct-menu-item" id="sct-portal-export">${t('menu_export')}</button>
+            <button class="sct-menu-item" id="sct-portal-import">${t('menu_import')}</button>
             <div class="sct-menu-divider"></div>
-            <button class="sct-menu-item" id="sct-portal-rescan">Перейти к кураторам (/mycurators)</button>
+            <button class="sct-menu-item" id="sct-portal-rescan">${t('menu_rescan')}</button>
             <div class="sct-menu-divider"></div>
             <div class="sct-menu-footer">Steam Curator Tracker v${SCRIPT_VERSION}</div>
         `;
@@ -840,6 +1299,15 @@
         chk.onchange = () => {
             settings.autoUpdateOnVisit = chk.checked;
             saveSettings(userInfo.steamId, settings);
+            onSettingsChange?.(settings);
+        };
+
+        const langSel = menu.querySelector('#sct-setting-language');
+        langSel.onchange = () => {
+            settings.language = langSel.value;
+            saveSettings(userInfo.steamId, settings);
+            currentActiveLanguage = getActiveLanguage(userInfo.steamId);
+            menu.remove();
             onSettingsChange?.(settings);
         };
 
@@ -878,31 +1346,34 @@
         const old = document.getElementById(MODAL_VIEWER_ID);
         if (old) old.remove();
 
+        currentActiveLanguage = getActiveLanguage(userInfo.steamId);
         injectStyles();
 
         const db = loadDatabase(userInfo.steamId, userInfo.userName);
         const modal = document.createElement('div');
         modal.id = MODAL_VIEWER_ID;
 
+        const initialActiveCount = getActiveFollowedCount(db.curators);
+
         modal.innerHTML = `
             <div class="sct-modal-card">
                 <div class="sct-modal-header">
-                    <h3 id="sct-modal-title">Ревизия кураторов: ${escapeHtml(db.user)} <span class="sct-version-tag">v${SCRIPT_VERSION}</span></h3>
-                    <button class="sct-close-btn" id="sct-viewer-close" title="Закрыть">&times;</button>
+                    <h3 id="sct-modal-title">${t('modal_title', { user: escapeHtml(db.user), active: initialActiveCount })} <span class="sct-version-tag">v${SCRIPT_VERSION}</span></h3>
+                    <button class="sct-close-btn" id="sct-viewer-close" title="${t('modal_close')}">&times;</button>
                 </div>
                 <div class="sct-modal-toolbar">
                     <div class="sct-toolbar-left">
                         <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px;">
                             <input type="checkbox" id="sct-toggle-active-only" checked style="accent-color:#66c0f4;">
-                            <span>Только активные подписки</span>
+                            <span>${t('modal_active_only')}</span>
                         </label>
                         <select class="sct-select-sort" id="sct-select-sort">
-                            <option value="oldest">Сначала старые (для отписки)</option>
-                            <option value="newest">Сначала новые</option>
+                            <option value="oldest">${t('sort_oldest')}</option>
+                            <option value="newest">${t('sort_newest')}</option>
                         </select>
                     </div>
                     <div style="display:flex; align-items:center; gap:10px;">
-                        <input type="text" class="sct-search-input" id="sct-viewer-search" placeholder="Поиск по названию...">
+                        <input type="text" class="sct-search-input" id="sct-viewer-search" placeholder="${t('search_placeholder')}">
                         <span id="sct-viewer-counter" style="font-size:11px; color:#899bb0;"></span>
                     </div>
                 </div>
@@ -910,9 +1381,9 @@
                     <table>
                         <thead>
                             <tr>
-                                <th style="width: 140px;">Дата подписки</th>
-                                <th>Куратор</th>
-                                <th style="width: 130px; text-align: right;">Действие</th>
+                                <th style="width: 140px;">${t('th_date')}</th>
+                                <th>${t('th_curator')}</th>
+                                <th style="width: 130px; text-align: right;">${t('th_action')}</th>
                             </tr>
                         </thead>
                         <tbody id="sct-viewer-tbody"></tbody>
@@ -932,14 +1403,14 @@
 
         function renderActionCell(c) {
             if (c.status === 'followed') {
-                return `<span class="btnv6_white_transparent btn_medium sct-btn-unfollow" data-clanid="${c.clanId}" role="button"><span>Отписаться</span></span>`;
+                return `<span class="btnv6_white_transparent btn_medium sct-btn-unfollow" data-clanid="${c.clanId}" role="button"><span>${t('btn_unfollow')}</span></span>`;
             } else {
                 const unfollowDate = c.unfollowedAt ? formatDate(c.unfollowedAt, true) : '';
-                const dateLabel = unfollowDate ? `Отписан ${unfollowDate}` : 'Отписан';
+                const dateLabel = unfollowDate ? t('status_unfollowed_date', { date: unfollowDate }) : t('status_unfollowed_short');
                 return `
                     <div style="display:inline-flex; align-items:center; gap:8px;">
                         <span style="color:#8f98a0; font-size:11px;">${dateLabel}</span>
-                        <span class="btnv6_blue_hoverfade btn_medium sct-btn-refollow" data-clanid="${c.clanId}" role="button"><span>Подписаться</span></span>
+                        <span class="btnv6_blue_hoverfade btn_medium sct-btn-refollow" data-clanid="${c.clanId}" role="button"><span>${t('btn_refollow')}</span></span>
                     </div>
                 `;
             }
@@ -948,7 +1419,7 @@
         function updateList() {
             const currentDb = loadDatabase(userInfo.steamId, userInfo.userName);
             const activeCount = getActiveFollowedCount(currentDb.curators);
-            titleEl.innerHTML = `Ревизия кураторов: ${escapeHtml(currentDb.user)} (${activeCount}/100) <span class="sct-version-tag">v${SCRIPT_VERSION}</span>`;
+            titleEl.innerHTML = `${t('modal_title', { user: escapeHtml(currentDb.user), active: activeCount })} <span class="sct-version-tag">v${SCRIPT_VERSION}</span>`;
 
             const order = sortSelect.value;
             const onlyActive = activeOnlyToggle.checked;
@@ -961,15 +1432,15 @@
                 return true;
             });
 
-            counterEl.innerText = `Показано: ${filtered.length} из ${Object.keys(currentDb.curators).length} (активных: ${activeCount}/100)`;
+            counterEl.innerText = t('counter_shown', { shown: filtered.length, total: Object.keys(currentDb.curators).length, active: activeCount });
 
             if (!filtered.length) {
-                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; padding:40px; color:#899bb0;">Кураторы не найдены.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; padding:40px; color:#899bb0;">${t('not_found')}</td></tr>`;
                 return;
             }
 
             tbody.innerHTML = filtered.map(c => {
-                const dateText = c.followedAt ? formatDate(c.followedAt, true) : 'Неизвестно';
+                const dateText = c.followedAt ? formatDate(c.followedAt, true) : t('date_unknown');
                 // Добавляем маркер ссылки #sct_ref=list, чтобы при переходе не обновлялась дата подписки
                 const safeLink = c.link ? `${c.link.split('#')[0]}#sct_ref=list` : '#';
 
@@ -977,7 +1448,7 @@
                     <tr id="sct-row-${c.clanId}">
                         <td style="color:#899bb0; font-variant-numeric:tabular-nums;">
                             ${dateText}
-                            ${c.isInitial ? '<br><small style="color:#66c0f4;">(создание БД)</small>' : ''}
+                            ${c.isInitial ? `<br><small style="color:#66c0f4;">${t('badge_tag_init')}</small>` : ''}
                         </td>
                         <td>
                             <a href="${safeLink}" target="_blank" rel="noopener noreferrer" class="sct-link">
@@ -998,7 +1469,7 @@
                 try {
                     unsafeWindow.FollowCurator(clanId, false);
                 } catch (e) {
-                    console.warn('[CuratorTracker] Ошибка вызова FollowCurator:', e);
+                    console.warn('[CuratorTracker] FollowCurator call error:', e);
                 }
             }
 
@@ -1019,9 +1490,9 @@
 
             // Мгновенно обновляем счетчики
             const activeCount = getActiveFollowedCount(currentDb.curators);
-            titleEl.innerHTML = `Ревизия кураторов: ${escapeHtml(currentDb.user)} (${activeCount}/100) <span class="sct-version-tag">v${SCRIPT_VERSION}</span>`;
+            titleEl.innerHTML = `${t('modal_title', { user: escapeHtml(currentDb.user), active: activeCount })} <span class="sct-version-tag">v${SCRIPT_VERSION}</span>`;
             const displayedRows = tbody.querySelectorAll('tr').length;
-            counterEl.innerText = `Показано: ${displayedRows} из ${Object.keys(currentDb.curators).length} (активных: ${activeCount}/100)`;
+            counterEl.innerText = t('counter_shown', { shown: displayedRows, total: Object.keys(currentDb.curators).length, active: activeCount });
 
             // Синхронизируем виджет на заднем плане (включая счетчик X/100)
             updateCuratorPageUI();
@@ -1033,7 +1504,7 @@
                 try {
                     unsafeWindow.FollowCurator(clanId, true);
                 } catch (e) {
-                    console.warn('[CuratorTracker] Ошибка вызова FollowCurator:', e);
+                    console.warn('[CuratorTracker] FollowCurator call error:', e);
                 }
             }
 
@@ -1061,9 +1532,9 @@
 
             // Мгновенно обновляем счетчики
             const activeCount = getActiveFollowedCount(currentDb.curators);
-            titleEl.innerHTML = `Ревизия кураторов: ${escapeHtml(currentDb.user)} (${activeCount}/100) <span class="sct-version-tag">v${SCRIPT_VERSION}</span>`;
+            titleEl.innerHTML = `${t('modal_title', { user: escapeHtml(currentDb.user), active: activeCount })} <span class="sct-version-tag">v${SCRIPT_VERSION}</span>`;
             const displayedRows = tbody.querySelectorAll('tr').length;
-            counterEl.innerText = `Показано: ${displayedRows} из ${Object.keys(currentDb.curators).length} (активных: ${activeCount}/100)`;
+            counterEl.innerText = t('counter_shown', { shown: displayedRows, total: Object.keys(currentDb.curators).length, active: activeCount });
 
             // Синхронизируем виджет на заднем плане (включая счетчик X/100)
             updateCuratorPageUI();
@@ -1175,23 +1646,25 @@
         let badgeHtml = '';
         let undoBtnHtml = '';
 
+        currentActiveLanguage = getActiveLanguage(userInfo.steamId);
+
         if (currentlyFollowed) {
             if (record?.followedAt) {
                 const dateText = formatDate(record.followedAt);
-                const tag = record.isInitial ? ' <small style="opacity:0.85;">(создание БД)</small>' : '';
-                const autoTag = record.isAutoUpdated ? ' <small style="opacity:0.85; color:#67c1f5;">(обновлено)</small>' : '';
+                const tag = record.isInitial ? ` <small style="opacity:0.85;">${t('badge_tag_init')}</small>` : '';
+                const autoTag = record.isAutoUpdated ? ` <small style="opacity:0.85; color:#67c1f5;">${t('badge_tag_updated')}</small>` : '';
                 badgeHtml = `
                     <div class="sct-status-capsule">
                         <img src="https://store.fastly.steamstatic.com/public/images/v6/ico/ico_selected_green.png" class="sct-ico-check" alt="checked">
-                        <span>Подписан: <b class="sct-date-highlight">${dateText}</b>${tag}${autoTag}</span>
+                        <span>${t('badge_followed')}<b class="sct-date-highlight">${dateText}</b>${tag}${autoTag}</span>
                     </div>
                 `;
 
                 if (record.isAutoUpdated && record._prevFollowedAt) {
                     const prevDateText = formatDate(record._prevFollowedAt);
                     undoBtnHtml = `
-                        <span class="btnv6_white_transparent btn_medium sct-btn-undo" id="sct-btn-undo-date" role="button" title="Вернуть прежнюю дату: ${prevDateText}">
-                            <span>Отменить</span>
+                        <span class="btnv6_white_transparent btn_medium sct-btn-undo" id="sct-btn-undo-date" role="button" title="${t('btn_undo_title', { date: prevDateText })}">
+                            <span>${t('btn_undo')}</span>
                         </span>
                     `;
                 }
@@ -1199,7 +1672,7 @@
                 badgeHtml = `
                     <div class="sct-status-capsule">
                         <img src="https://store.fastly.steamstatic.com/public/images/v6/ico/ico_selected_green.png" class="sct-ico-check" alt="checked">
-                        <span>Подписан: <b class="sct-date-highlight">Дата неизвестна</b></span>
+                        <span>${t('badge_followed')}<b class="sct-date-highlight">${t('badge_date_unknown')}</b></span>
                     </div>
                 `;
             }
@@ -1208,13 +1681,13 @@
                 const dateText = formatDate(record.unfollowedAt);
                 badgeHtml = `
                     <div class="sct-status-capsule sct-unfollowed">
-                        <span>Отписан: <b class="sct-date-highlight">${dateText}</b></span>
+                        <span>${t('badge_unfollowed')}<b class="sct-date-highlight">${dateText}</b></span>
                     </div>
                 `;
             } else {
                 badgeHtml = `
                     <div class="sct-status-capsule sct-new-curator">
-                        <span>Новый куратор</span>
+                        <span>${t('badge_new_curator')}</span>
                     </div>
                 `;
             }
@@ -1253,8 +1726,8 @@
         let newUserButton = '';
         if (!userHasDb && userInfo.steamId !== 'anonymous') {
             newUserButton = `
-                <a href="https://store.steampowered.com/curators/mycurators/?sct_init=1" class="btnv6_blue_hoverfade btn_medium" title="База не создана. Нажмите для первичного обхода подписок">
-                    <span>Создать базу</span>
+                <a href="https://store.steampowered.com/curators/mycurators/?sct_init=1" class="btnv6_blue_hoverfade btn_medium" title="${t('btn_create_db_title')}">
+                    <span>${t('btn_create_db')}</span>
                 </a>
             `;
         }
@@ -1265,10 +1738,10 @@
             ${newUserButton}
             ${badgeHtml}
             ${undoBtnHtml}
-            <span class="btnv6_blue_hoverfade btn_medium" id="sct-btn-view-list" role="button" title="Просмотр и отписка от кураторов">
-                <span>Список (${activeCount}/100)</span>
+            <span class="btnv6_blue_hoverfade btn_medium" id="sct-btn-view-list" role="button" title="${t('btn_list_title')}">
+                <span>${t('btn_list', { count: activeCount })}</span>
             </span>
-            <span class="btnv6_blue_hoverfade btn_medium sct-btn-gear" id="sct-btn-gear" role="button" title="Настройки, экспорт и импорт базы">
+            <span class="btnv6_blue_hoverfade btn_medium sct-btn-gear" id="sct-btn-gear" role="button" title="${t('btn_gear_title')}">
                 <span><svg class="sct-svg-icon" viewBox="0 0 16 16"><path d="M9.1 4.4L8.6 2H7.4l-.5 2.4-.7.3-2-1.3-.9.8 1.3 2-.2.7-2.5.5v1.2l2.5.5.3.8-1.3 2 .8.8 2-1.3.8.3.4 2.5h1.2l.5-2.5.7-.3 2 1.3.8-.8-1.3-2 .3-.7 2.4-.5V8.6l-2.4-.5-.3-.7 1.3-2-.8-.8-2 1.3-.7-.3zM8 10.5c-1.4 0-2.5-1.1-2.5-2.5s1.1-2.5 2.5-2.5 2.5 1.1 2.5 2.5-1.1 2.5-2.5 2.5z"/></svg></span>
             </span>
         `;
@@ -1305,7 +1778,7 @@
             await new Promise(r => setTimeout(r, 1200));
             const currentHeight = document.body.scrollHeight;
             const count = document.querySelectorAll('.curator_page.followed').length;
-            progressCb?.(`Найдено: ${count}`);
+            progressCb?.(t('scan_found', { count }));
 
             if (currentHeight === lastHeight) {
                 if (++checks >= 2) break;
@@ -1323,7 +1796,7 @@
                 const nameEl = card.querySelector('.profile .info .name') || card.querySelector('.curator_name a');
                 const linkEl = card.querySelector('a.profile_avatar') || card.querySelector('.profile .info .name a');
                 const rawName = nameEl?.textContent || 'Unknown';
-                const name = rawName.replace(/^Недавние обзоры от\s*/i, '').trim();
+                const name = rawName.replace(/^(Недавние обзоры от|Recent reviews from|近期评测来自|Análises recentes de|Reseñas recientes de|Kürzliche Rezensionen von)\s*/i, '').trim();
                 const link = linkEl?.href || '';
                 const clanId = link.match(/\/curator\/(\d+)/)?.[1] || card.getAttribute('data-clanid');
 
@@ -1331,7 +1804,7 @@
                     list.push({ clanId, name, link });
                 }
             } catch (e) {
-                console.warn('[CuratorTracker] Ошибка разбора карточки куратора:', e);
+                console.warn('[CuratorTracker] Curator card parse error:', e);
             }
         });
         return list;
@@ -1339,16 +1812,17 @@
 
     async function executeInitialScan(btnEl) {
         const userInfo = getUserInfo();
+        currentActiveLanguage = getActiveLanguage(userInfo.steamId);
         const originalText = btnEl.innerHTML;
         btnEl.disabled = true;
-        btnEl.innerHTML = '⏳ <span>Скроллинг страницы...</span>';
+        btnEl.innerHTML = `⏳ <span>${t('scan_scrolling')}</span>`;
 
         try {
             await autoScrollCurators((text) => {
                 btnEl.innerHTML = `⏳ <span>${text}</span>`;
             });
 
-            btnEl.innerHTML = '⚙️ <span>Заведение базы...</span>';
+            btnEl.innerHTML = `⚙️ <span>${t('scan_saving')}</span>`;
             const scraped = scrapeMyCurators();
 
             const existingDb = storage.get(getStorageKey(userInfo.steamId), null);
@@ -1384,11 +1858,17 @@
 
             saveDatabase(db);
             const activeCount = getActiveFollowedCount(db.curators);
-            alert(`✅ База кураторов успешно сохранена!\nПользователь: ${userInfo.userName}\nАктивных подписок: ${activeCount}/100\nВсего в базе: ${Object.keys(db.curators).length} (новых добавлено: ${addedCount})\nДата создания базы: ${formatDate(createdAt)}`);
+            alert(t('scan_success', {
+                user: userInfo.userName,
+                active: activeCount,
+                total: Object.keys(db.curators).length,
+                added: addedCount,
+                date: formatDate(createdAt)
+            }));
             renderMyCuratorsPanel();
         } catch (err) {
-            console.error('[CuratorTracker] Ошибка сканирования:', err);
-            alert(`❌ Ошибка инициализации: ${err.message}`);
+            console.error('[CuratorTracker] Scan error:', err);
+            alert(t('scan_error', { err: err.message }));
         } finally {
             btnEl.disabled = false;
             btnEl.innerHTML = originalText;
@@ -1407,6 +1887,7 @@
         }
 
         const userInfo = getUserInfo();
+        currentActiveLanguage = getActiveLanguage(userInfo.steamId);
         const userHasDb = hasDatabase(userInfo.steamId);
         const db = loadDatabase(userInfo.steamId, userInfo.userName);
         const activeCount = getActiveFollowedCount(db.curators);
@@ -1416,37 +1897,36 @@
         if (userHasDb) {
             statusText = `
                 <div style="font-size:11px; color:#899bb0; line-height:1.4; margin-bottom:12px;">
-                    Пользователь: <b>${escapeHtml(db.user)}</b><br>
-                    Подписок: <b style="color:#67c1f5;">${activeCount} / 100</b> (всего в базе: ${total})<br>
-                    Дата создания БД: <b>${formatDate(db.createdAt)}</b>
+                    ${t('panel_user')} <b>${escapeHtml(db.user)}</b><br>
+                    ${t('panel_follows')} <b style="color:#67c1f5;">${activeCount} / 100</b> (${t('panel_total')} ${total})<br>
+                    ${t('panel_db_created')} <b>${formatDate(db.createdAt)}</b>
                 </div>
             `;
         } else {
             statusText = `
-                <div style="font-size:11px; color:#f39c12; line-height:1.4; margin-bottom:12px;">
-                    <b>Новый пользователь.</b> База кураторов еще не заведена.<br>
-                    Нажмите кнопку ниже для автоматического сбора подписок.
+                <div style="font-size:11px; color:#f39c12; line-height:1.4; margin-bottom:12px; white-space:pre-line;">
+                    ${escapeHtml(t('panel_new_user'))}
                 </div>
                 <span class="btnv6_blue_hoverfade btn_medium" id="sct-btn-init-scan" role="button" style="width:100%; margin-bottom:8px;">
-                    <span style="justify-content:center;">Начать первичный обход кураторки</span>
+                    <span style="justify-content:center;">${t('panel_btn_scan')}</span>
                 </span>
             `;
         }
 
         panel.innerHTML = `
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-                <h4 style="margin:0; font-size:14px; color:#66c0f4;">Трекер кураторов Steam <span class="sct-version-tag">v${SCRIPT_VERSION}</span></h4>
-                <span class="btnv6_blue_hoverfade btn_medium sct-btn-gear" id="sct-panel-gear" role="button" title="Настройки и база">
+                <h4 style="margin:0; font-size:14px; color:#66c0f4;">${t('panel_title')} <span class="sct-version-tag">v${SCRIPT_VERSION}</span></h4>
+                <span class="btnv6_blue_hoverfade btn_medium sct-btn-gear" id="sct-panel-gear" role="button" title="${t('btn_gear_title')}">
                     <span><svg class="sct-svg-icon" viewBox="0 0 16 16"><path d="M9.1 4.4L8.6 2H7.4l-.5 2.4-.7.3-2-1.3-.9.8 1.3 2-.2.7-2.5.5v1.2l2.5.5.3.8-1.3 2 .8.8 2-1.3.8.3.4 2.5h1.2l.5-2.5.7-.3 2 1.3.8-.8-1.3-2 .3-.7 2.4-.5V8.6l-2.4-.5-.3-.7 1.3-2-.8-.8-2 1.3-.7-.3zM8 10.5c-1.4 0-2.5-1.1-2.5-2.5s1.1-2.5 2.5-2.5 2.5 1.1 2.5 2.5-1.1 2.5-2.5 2.5z"/></svg></span>
                 </span>
             </div>
             ${statusText}
             <div style="display:flex; gap:6px;">
                 <span class="btnv6_blue_hoverfade btn_medium" id="sct-btn-panel-view" role="button" style="flex:1;">
-                    <span style="justify-content:center;">Список (${activeCount}/100)</span>
+                    <span style="justify-content:center;">${t('btn_list', { count: activeCount })}</span>
                 </span>
-                <span class="btnv6_white_transparent btn_medium" id="sct-btn-go-back" role="button" title="Назад">
-                    <span>Назад</span>
+                <span class="btnv6_white_transparent btn_medium" id="sct-btn-go-back" role="button" title="${t('panel_btn_back')}">
+                    <span>${t('panel_btn_back')}</span>
                 </span>
             </div>
         `;
@@ -1529,7 +2009,7 @@
                         updateCuratorPageUI();
                     }, 350);
                 } catch (err) {
-                    console.error('[CuratorTracker] Ошибка хука FollowCurator:', err);
+                    console.error('[CuratorTracker] FollowCurator hook error:', err);
                 }
                 return originalFollowCurator.apply(this, arguments);
             };

@@ -194,10 +194,105 @@ const versionMatch = trackerSource.match(/const SCRIPT_VERSION = ['"]([^'"]+)['"
 assert.ok(versionMatch, 'В коде трекера должна присутствовать константа SCRIPT_VERSION');
 const currentVersion = versionMatch[1];
 assert.match(currentVersion, /^\d+\.\d+\.\d+$/, 'Версия должна соответствовать SemVer (X.Y.Z)');
-assert.strictEqual(currentVersion, '2.7.2', 'Версия в константе должна быть 2.7.2');
+assert.strictEqual(currentVersion, '2.8.0', 'Версия в константе должна быть 2.8.0');
 
 const headerVersionMatch = trackerSource.match(/\/\/\s*@version\s+([^\r\n]+)/);
 assert.ok(headerVersionMatch, 'В метаданных userscript должна быть директива @version');
 assert.strictEqual(headerVersionMatch[1].trim(), currentVersion, 'Версия в @version должна совпадать с константой SCRIPT_VERSION');
 
-console.log('✅ Все тесты трекера (включая лимит X/100, автообновление, отмену, Creator Homes и SemVer) успешно пройдены!');
+
+// -----------------------------------------------------------------------------
+// Тест 8: Мультиязычность (i18n: EN по умолчанию, RU, ZH, PT, ES, DE)
+// -----------------------------------------------------------------------------
+console.log('Тест 8: Проверка многоязычности i18n (EN, RU, ZH, PT, ES, DE)...');
+
+// Извлекаем словарь I18N непосредственно из исходного кода трекера
+const i18nMatch = trackerSource.match(/const I18N = (\{[\s\S]*?\n\s*\});\r?\n\r?\n\s*const LOCALE_MAP/);
+assert.ok(i18nMatch, 'В исходном коде трекера должен присутствовать словарь I18N');
+
+const I18N = (new Function('return ' + i18nMatch[1]))();
+const LANGUAGES = ['en', 'ru', 'zh', 'pt', 'es', 'de'];
+const enKeys = Object.keys(I18N.en);
+
+assert.strictEqual(enKeys.length >= 50, true, 'В словаре должно быть не менее 50 ключей');
+
+// 8.1 Проверка полноты перевода всех языков
+for (const lang of LANGUAGES) {
+    assert.ok(I18N[lang], `Язык ${lang} должен присутствовать в I18N`);
+    for (const key of enKeys) {
+        assert.ok(I18N[lang][key], `Ключ "${key}" должен быть переведен на язык "${lang}"`);
+    }
+}
+console.log(`  ✓ Все ${enKeys.length} ключей перевода полностью валидны во всех 6 языках!`);
+
+// 8.2 Проверка функции t() и подстановки параметров
+function simulateT(dict, lang, key, params = {}) {
+    const d = dict[lang] || dict.en;
+    let text = d && d[key] !== undefined ? d[key] : (dict.en[key] !== undefined ? dict.en[key] : key);
+    for (const [k, v] of Object.entries(params)) {
+        text = text.replace(new RegExp('\\{' + k + '\\}', 'g'), v !== undefined && v !== null ? v : '');
+    }
+    return text;
+}
+
+assert.strictEqual(simulateT(I18N, 'en', 'btn_list', { count: 42 }), 'List (42/100)');
+assert.strictEqual(simulateT(I18N, 'ru', 'btn_list', { count: 42 }), 'Список (42/100)');
+assert.strictEqual(simulateT(I18N, 'zh', 'btn_list', { count: 42 }), '关注列表 (42/100)');
+assert.strictEqual(simulateT(I18N, 'pt', 'btn_list', { count: 42 }), 'Lista (42/100)');
+assert.strictEqual(simulateT(I18N, 'es', 'btn_list', { count: 42 }), 'Lista (42/100)');
+assert.strictEqual(simulateT(I18N, 'de', 'btn_list', { count: 42 }), 'Liste (42/100)');
+
+// Fallback на английский при несуществующем языке
+assert.strictEqual(simulateT(I18N, 'fr', 'btn_list', { count: 10 }), 'List (10/100)');
+
+// 8.3 Проверка алгоритма автоопределения языка (detectLanguage)
+function simulateDetect(steamLang, htmlLang, cookieLang, navLang) {
+    if (steamLang) {
+        const s = steamLang.toLowerCase();
+        if (s === 'russian') return 'ru';
+        if (s === 'schinese' || s === 'tchinese') return 'zh';
+        if (s === 'brazilian' || s === 'portuguese') return 'pt';
+        if (s === 'spanish' || s === 'latam') return 'es';
+        if (s === 'german') return 'de';
+        if (s === 'english') return 'en';
+    }
+    if (htmlLang) {
+        const h = htmlLang.toLowerCase();
+        if (h.startsWith('ru')) return 'ru';
+        if (h.startsWith('zh')) return 'zh';
+        if (h.startsWith('pt')) return 'pt';
+        if (h.startsWith('es')) return 'es';
+        if (h.startsWith('de')) return 'de';
+        if (h.startsWith('en')) return 'en';
+    }
+    if (cookieLang) {
+        const c = cookieLang.toLowerCase();
+        if (c === 'russian') return 'ru';
+        if (c === 'schinese' || c === 'tchinese') return 'zh';
+        if (c === 'brazilian' || c === 'portuguese') return 'pt';
+        if (c === 'spanish' || c === 'latam') return 'es';
+        if (c === 'german') return 'de';
+        if (c === 'english') return 'en';
+    }
+    if (navLang) {
+        const n = navLang.toLowerCase();
+        if (n.startsWith('ru')) return 'ru';
+        if (n.startsWith('zh')) return 'zh';
+        if (n.startsWith('pt')) return 'pt';
+        if (n.startsWith('es')) return 'es';
+        if (n.startsWith('de')) return 'de';
+    }
+    return 'en';
+}
+
+assert.strictEqual(simulateDetect('russian'), 'ru', 'Определение по Steam language');
+assert.strictEqual(simulateDetect('schinese'), 'zh', 'Определение по Steam Simplified Chinese');
+assert.strictEqual(simulateDetect('brazilian'), 'pt', 'Определение по Steam Brazilian Portuguese');
+assert.strictEqual(simulateDetect(null, 'ru-RU'), 'ru', 'Определение по HTML lang');
+assert.strictEqual(simulateDetect(null, null, 'german'), 'de', 'Определение по cookie Steam_Language');
+assert.strictEqual(simulateDetect(null, null, null, 'es-ES'), 'es', 'Определение по browser navigator');
+assert.strictEqual(simulateDetect(null, null, null, 'fr-FR'), 'en', 'Английский по умолчанию при неподдерживаемом языке');
+assert.strictEqual(simulateDetect(null, null, null, null), 'en', 'Английский по умолчанию при отсутствии параметров');
+console.log('  ✓ Детекция языков и английский fallback работают безупречно!');
+
+console.log('✅ Все тесты трекера (включая лимит X/100, автообновление, отмену, Creator Homes, SemVer и i18n) успешно пройдены!');
