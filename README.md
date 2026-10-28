@@ -68,7 +68,7 @@
 
 ## Состав репозитория
 
-- [`steam-curator-tracker.user.js`](file:///e:/%D0%98%D0%BB%D1%8C%D0%B3%D0%B8%D0%B7/Documents/VibeCoding/TM_Scripts/userscript-steam-curator/steam-curator-tracker.user.js) — основной трекер кураторов (**v2.8.0**).
+- [`steam-curator-tracker.user.js`](file:///e:/%D0%98%D0%BB%D1%8C%D0%B3%D0%B8%D0%B7/Documents/VibeCoding/TM_Scripts/userscript-steam-curator/steam-curator-tracker.user.js) — основной трекер кураторов (**v2.8.1**).
 - [`steam-curators-sync.user.js`](file:///e:/%D0%98%D0%BB%D1%8C%D0%B3%D0%B8%D0%B7/Documents/VibeCoding/TM_Scripts/userscript-steam-curator/steam-curators-sync.user.js) — архивный скрипт экспорта и компаратора кураторов со страницы `/mycurators` (v1.0.0).
 - [`test_tracker.js`](file:///e:/%D0%98%D0%BB%D1%8C%D0%B3%D0%B8%D0%B7/Documents/VibeCoding/TM_Scripts/userscript-steam-curator/test_tracker.js) — автоматические тесты трекера и режимов сортировки.
 - [`test_comparator.js`](file:///e:/%D0%98%D0%BB%D1%8C%D0%B3%D0%B8%D0%B7/Documents/VibeCoding/TM_Scripts/userscript-steam-curator/test_comparator.js) — тесты компаратора.

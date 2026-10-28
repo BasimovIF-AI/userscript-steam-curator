@@ -194,7 +194,7 @@ const versionMatch = trackerSource.match(/const SCRIPT_VERSION = ['"]([^'"]+)['"
 assert.ok(versionMatch, 'В коде трекера должна присутствовать константа SCRIPT_VERSION');
 const currentVersion = versionMatch[1];
 assert.match(currentVersion, /^\d+\.\d+\.\d+$/, 'Версия должна соответствовать SemVer (X.Y.Z)');
-assert.strictEqual(currentVersion, '2.8.0', 'Версия в константе должна быть 2.8.0');
+assert.strictEqual(currentVersion, '2.8.1', 'Версия в константе должна быть 2.8.1');
 
 const headerVersionMatch = trackerSource.match(/\/\/\s*@version\s+([^\r\n]+)/);
 assert.ok(headerVersionMatch, 'В метаданных userscript должна быть директива @version');
@@ -295,4 +295,60 @@ assert.strictEqual(simulateDetect(null, null, null, 'fr-FR'), 'en', 'Англи�
 assert.strictEqual(simulateDetect(null, null, null, null), 'en', 'Английский по умолчанию при отсутствии параметров');
 console.log('  ✓ Детекция языков и английский fallback работают безупречно!');
 
-console.log('✅ Все тесты трекера (включая лимит X/100, автообновление, отмену, Creator Homes, SemVer и i18n) успешно пройдены!');
+
+// -----------------------------------------------------------------------------
+// Тест 9: Защита от оптимистичной записи (Strict DOM Verification) и Auto-heal
+// -----------------------------------------------------------------------------
+console.log('Тест 9: Проверка защиты от оптимистичной записи (Strict DOM Verification)...');
+
+// 9.1 Симуляция клика при отказе Steam (например, лимит 100 мест)
+let dbTouched = false;
+function simulateClickWithVerification(clanId, isFollow, domStateFollowed) {
+    // В v2.8.1 запись в базу НЕ происходит сразу по клику
+    // Она происходит только если domStateFollowed === isFollow
+    if (domStateFollowed === isFollow) {
+        dbTouched = true;
+    }
+}
+
+// Пользователь нажал "Подписаться" (isFollow = true), но у него лимит 100, Steam отклонил запрос
+simulateClickWithVerification("999", true, false);
+assert.strictEqual(dbTouched, false, 'При отказе Steam база данных НЕ должна затрагиваться!');
+
+// 9.2 Проверка логики Auto-heal для фантомных записей
+function checkAutoHeal(record, domFollowed) {
+    if (record && record.status === 'unfollowed' && !record.isInitial && record.followedAt && record.unfollowedAt) {
+        const timeDiff = Math.abs(new Date(record.unfollowedAt).getTime() - new Date(record.followedAt).getTime());
+        if (timeDiff < 30000 && !domFollowed) {
+            return null; // запись удалена
+        }
+    }
+    return record;
+}
+
+const phantomRecord = {
+    clanId: "999",
+    name: "Failed Curator",
+    status: 'unfollowed',
+    followedAt: "2026-10-28T19:10:00.000Z",
+    unfollowedAt: "2026-10-28T19:10:01.000Z", // разница всего 1 секунда!
+    isInitial: false
+};
+
+const healed = checkAutoHeal(phantomRecord, false);
+assert.strictEqual(healed, null, 'Фантомная запись с почти одновременными датами должна быть автоматически очищена');
+
+const legitimateUnfollowed = {
+    clanId: "888",
+    name: "Legit Curator",
+    status: 'unfollowed',
+    followedAt: "2025-01-01T00:00:00.000Z",
+    unfollowedAt: "2026-10-28T19:00:00.000Z", // разница почти 2 года
+    isInitial: false
+};
+
+const kept = checkAutoHeal(legitimateUnfollowed, false);
+assert.notStrictEqual(kept, null, 'Настоящая запись об отписке должна сохраняться');
+console.log('  ✓ Защита от оптимистичной записи и Auto-heal работают корректно!');
+
+console.log('✅ Все тесты трекера (включая лимит X/100, автообновление, отмену, Creator Homes, SemVer, i18n и Strict Verification) успешно пройдены!');

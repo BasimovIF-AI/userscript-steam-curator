@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Steam Curator Follow Tracker
 // @namespace    https://github.com/BasimovIF-AI/userscript-steam-curator
-// @version      2.8.0
+// @version      2.8.1
 // @description  Steam Curator Follow Tracker - Native UI, i18n multi-language support (EN default, RU, ZH, PT, ES, DE), 100 curator limit tracking, in-modal unfollow/refollow, Creator Homes support
 // @author       Senior Software Engineer
 // @match        *://store.steampowered.com/curator/*
@@ -17,7 +17,7 @@
 (function() {
     'use strict';
 
-    const SCRIPT_VERSION = '2.8.0';
+    const SCRIPT_VERSION = '2.8.1';
     const WIDGET_ID = 'steam-curator-tracker-panel';
     const MYCURATORS_PANEL_ID = 'steam-curator-tracker-mycurators-panel';
     const MODAL_VIEWER_ID = 'steam-curator-viewer-modal';
@@ -1632,6 +1632,16 @@
             }
         }
 
+        // Автоматическое устранение фантомных записей об отписке при ошибке лимита 100 подписок
+        if (record && record.status === 'unfollowed' && !record.isInitial && record.followedAt && record.unfollowedAt) {
+            const timeDiff = Math.abs(new Date(record.unfollowedAt).getTime() - new Date(record.followedAt).getTime());
+            if (timeDiff < 30000 && !domFollowed) {
+                delete db.curators[curatorInfo.clanId];
+                saveDatabase(db);
+                record = null;
+            }
+        }
+
         const currentlyFollowed = record ? (record.status === 'followed') : domFollowed;
 
         // Логика автообновления даты подписки при переходе (если разрешено настройкой и не из нашей таблицы)
@@ -1975,10 +1985,29 @@
     }
 
     // -------------------------------------------------------------------------
-    // Перехват кликов и событий подписки / отписки
+    // Перехват кликов и событий подписки / отписки (Strict DOM Verification)
     // -------------------------------------------------------------------------
+    function waitForFollowStateChange(clanId, isFollow, maxAttempts = 35) {
+        let attempts = 0;
+        const interval = setInterval(() => {
+            attempts++;
+            const domFollowed = isFollowedInDOM(clanId);
+            if (domFollowed === isFollow) {
+                clearInterval(interval);
+                const curatorInfo = getCuratorInfo();
+                const userInfo = getUserInfo();
+                recordFollowAction(clanId, isFollow, curatorInfo, userInfo);
+            } else if (attempts >= maxAttempts) {
+                clearInterval(interval);
+                // Запрос Steam не увенчался успехом (лимит 100, сбой сети или отмена)
+                // Базу данных НЕ меняем, синхронизируем UI с текущим DOM
+                updateCuratorPageUI();
+            }
+        }, 100);
+    }
+
     function initTracker() {
-        // 1. Делегированный перехват кликов
+        // 1. Делегированный перехват кликов с отложенным подтверждением через DOM
         document.addEventListener('click', (e) => {
             const followBtn = e.target.closest('[id^="CuratorFollowBtn_"]');
             const unfollowBtn = e.target.closest('[id^="CuratorUnFollowBtn_"]');
@@ -1987,31 +2016,22 @@
                 const isFollow = Boolean(followBtn);
                 const btn = followBtn || unfollowBtn;
                 const clanId = btn.id.replace(isFollow ? 'CuratorFollowBtn_' : 'CuratorUnFollowBtn_', '');
-                const curatorInfo = getCuratorInfo();
-                const userInfo = getUserInfo();
-
-                recordFollowAction(clanId, isFollow, curatorInfo, userInfo);
-                setTimeout(() => {
-                    updateCuratorPageUI();
-                }, 350);
+                waitForFollowStateChange(clanId, isFollow);
             }
         }, true);
 
-        // 2. Хук на нативную функцию Steam FollowCurator
+        // 2. Хук на нативную функцию Steam FollowCurator с подтверждением через DOM
         if (typeof unsafeWindow !== 'undefined' && typeof unsafeWindow.FollowCurator === 'function') {
             const originalFollowCurator = unsafeWindow.FollowCurator;
             unsafeWindow.FollowCurator = function(clanid, bFollow) {
+                const clanStr = String(clanid);
+                const isFollow = Boolean(bFollow);
+                waitForFollowStateChange(clanStr, isFollow);
                 try {
-                    const curatorInfo = getCuratorInfo();
-                    const userInfo = getUserInfo();
-                    recordFollowAction(String(clanid), Boolean(bFollow), curatorInfo, userInfo);
-                    setTimeout(() => {
-                        updateCuratorPageUI();
-                    }, 350);
+                    return originalFollowCurator.apply(this, arguments);
                 } catch (err) {
                     console.error('[CuratorTracker] FollowCurator hook error:', err);
                 }
-                return originalFollowCurator.apply(this, arguments);
             };
         }
 
